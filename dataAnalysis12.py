@@ -13,6 +13,7 @@ NOTE: This only works for one set of data (i.e. from one participant).
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
 
 
 # Helper Functions
@@ -30,18 +31,18 @@ def divide_chunks(l, n):
 
 # Input data file and convert to pandas data frame
 dataFile = input('Input data file path (MUST BE CSV FILE): ')
-dataFile = pd.read_csv(dataFile)
+df = pd.read_csv(dataFile)
 
 # Clean up dataframe by only keeping necessary columns
 ## First: survey data
-surveyData = dataFile[['survey_awareness', 'survey_order', 'gender', 
+surveyData = df[['survey_awareness', 'survey_order', 'gender', 
                        'age_dropdown', 'race', 'ethnicity', 'ADHD_diagnosis', 
                        'Tourettes_diagnosis', 'Medication',  'sleep_dropdown', 
                        'sleepiness', 'caffeine_consumption', 
                        'drug_consumption', 'modEx_dropdown', 'vigEx_dropdown', 
                        'vision_type']].iloc[-1] # Only call last row (which has the responses)
 ## Then experimental data
-exData = dataFile[['empty_column', 'response', 'correct', 'response_time', 
+exData = df[['empty_column', 'response', 'correct', 'response_time', 
                    'accuracy', 'average_response_time', 'total_response_time']].iloc[:-1] # omits final unnecessary row
 exData = exData[-420:].reset_index(drop=True).replace('None', np.nan) # omits practice trial rows, then resets index and replaces 'None' objects with nan
 ### NOTE: empty_column refers to the specific key that is displayed (stimulus)
@@ -83,6 +84,14 @@ phases = trainPhase + testPhase # Merge arrays into one to be appended into the 
 
 # Concatenate all arrays into one big dataframe
 allData = pd.DataFrame({'Key Press #':keyPress, 'Trial #':trialNum, 'Key Transition':transList, 'Response Time':rt, 'Phase':phases})
+# Saving data
+saveChoice = input('Do you want to save a clean version of the data as well as all plots? [y/n]: ')
+if saveChoice == 'y':
+    savePath = input('Enter path where the file will be saved: ')
+    fileName = dataFile.split('/')[-1:][0].split('.')[0]
+    saveDir = os.path.join(savePath, fileName)
+    os.makedirs(saveDir)
+    allData.to_csv(saveDir + '/allData.csv', index=False)
 
 ###################
 
@@ -118,9 +127,13 @@ plt.xlabel('Trial Number')
 plt.xticks(np.arange(1, len(aveRTList)+1))
 plt.ylabel('Reaction time (ms)')
 plt.title('Change in reaction time across all trial sequences')
-plt.show()
-# OR IF YOU WANT TO SAVE
-## plt.savefig(savePath + '/allTrials.png', bbox_inches='tight')
+fig1 = plt.gcf()
+plt.show(block=False)
+plt.pause(1)
+plt.close()
+if saveChoice == 'y':
+    fig1.savefig(saveDir + '/allTrials.png', bbox_inches='tight')
+
 
 
 ## 2. Change in reaction time across trials for each unique transition
@@ -151,7 +164,6 @@ finalDF = finalDF.transpose() # transpose dataframe so that uniqueTransitions ca
 ### Then plot data
 for column in finalDF:
     # reset all values
-    plt.figure()
     col1 = []
     col2 = []
     col2 = finalDF[column][1:] # picks a column and creates an array of only the RTs
@@ -164,9 +176,12 @@ for column in finalDF:
         plt.xticks(col1) # sets x-axis to go in intervals of 1
         plt.ylabel('Reaction time (ms)')
         plt.title(f'Change in reaction time across trials of {keyTransition}')
-        plt.show()
-        # OR IF YOU WANT TO SAVE
-        ## plt.savefig(savePath + f'{keyTransition}.png', bbox_inches='tight')
+        figs = plt.gcf()
+        plt.show(block=False)
+        plt.pause(3)
+        plt.close()
+        if saveChoice == 'y':
+            figs.savefig(saveDir + f'/{keyTransition}.png', bbox_inches='tight')
         
         
 ## 4. Success rate within each sequence across the session
@@ -179,10 +194,16 @@ aveCorrTotal = average(aveCorr) # calculate total average correct
 ### Create dataframe showing average success rate for each trial sequence
 successRates = pd.DataFrame({'Trial #':trials, 'Success Rate':aveCorr})
 ### Plot success rate
+plt.figure() # reset figure
 plt.plot(successRates['Trial #'], successRates['Success Rate'])
 plt.xlabel('Trial Number')
 plt.xticks(trials)
 plt.ylabel('Success Rate')
 plt.yticks([0, 0.5, 1.0])
 plt.title('Average success rates for each trial')
-plt.show()
+figSR = plt.gcf()
+plt.show(block=False)
+plt.pause(3)
+plt.close()
+if saveChoice == 'y':
+    figSR.savefig(saveDir + '/successRate.png', bbox_inches='tight')
