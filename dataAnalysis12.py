@@ -72,6 +72,7 @@ for i in exData['empty_column']:
         
 ## 4. Reaction Time (rt)
 rt = np.array(exData['response_time']) # create array using response_time data
+rt = np.where(rt >= 750, np.nan, rt) # convert all rts >= 750 to nan (since those are the misses - late responses)
 
 ## 5. Phase (phases)
 ### Split trialNum into two arrays
