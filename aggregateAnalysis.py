@@ -8,15 +8,13 @@ Sequence data analysis for participant's data from sequence task that uses
 12-items in a sequence. This iterates through multiple data files from one
 location and saves them into another. This script is based on dataAnalysis12.py.
 """
-
 # Import libraries
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
 import glob
-import os.path
-
+from os.path import dirname
 
 # Helper Functions
 ## Average calculator
@@ -30,19 +28,27 @@ def divide_chunks(l, n):
     for x in range(0, len(l), n):  
         yield l[x:x + n] 
 
-
 # Locate data files
 fileLoc = input('Enter path where files are located: ')
-dirList = sorted(glob.glob(fileLoc + '*'))
+dirList = sorted(glob.glob(fileLoc + '/*'))
+saveLoc = dirname(dirname(fileLoc)) # Files are in a folder named 'data', and we want everything to be saved at the directory before this folder
 
-# Create aggregate dataframes
-## 1. Average RT per trial
+# Set up aggregate dataframes
 trials = np.arange(1, 36) # Set an array of trial numbers
-aggDF = pd.DataFrame(index=trials) # Set df with index as trial numbers
+aggDF = pd.DataFrame(index=trials) # Set df with index as trial numbers for aggregated average RTs per trial
+srDF = pd.DataFrame(index=trials) # Set df with index as trial numbers for aggregated average success rates per trial
+surveyDF = pd.DataFrame() # Set empty df for aggregated survey Data
+
+###################
 
 # Loop through each data file
 for file in dirList:
     df = pd.read_csv(file)
+    
+    # Set file names and save directories
+    fileName = file.split('/')[-1:][0].split('\\')[1].split('.')[0]
+    saveDir = os.path.join(saveLoc, fileName)
+    os.makedirs(saveDir, exist_ok=True)
     
     # Clean up dataframe by only keeping necessary columns
     ## First: survey data
@@ -52,6 +58,7 @@ for file in dirList:
                            'sleepiness', 'caffeine_consumption', 
                            'drug_consumption', 'modEx_dropdown', 'vigEx_dropdown', 
                            'vision_type']].iloc[-1] # Only call last row (which has the responses)
+    surveyDF[fileName] = surveyData # Append survey data into surveyDF dataframe
     ## Then experimental data
     exData = df[['empty_column', 'response', 'correct', 'response_time', 
                        'accuracy', 'average_response_time', 'total_response_time']].iloc[:-1] # omits final unnecessary row
@@ -83,7 +90,6 @@ for file in dirList:
             
     ## 4. Reaction Time (rt)
     rt = np.array(exData['response_time']) # create array using response_time data
-    rt = np.where(rt >= 750, np.nan, rt) # convert all rts >= 750 to nan (since those are the misses - late responses)
     
     ## 5. Phase (phases)
     ### Split trialNum into two arrays
@@ -97,13 +103,10 @@ for file in dirList:
     # Concatenate all arrays into one big dataframe
     allData = pd.DataFrame({'Key Press #':keyPress, 'Trial #':trialNum, 'Key Transition':transList, 'Response Time':rt, 'Phase':phases})
     # Saving data
-    fileName = file.split('/')[-1:][0].split('\\')[1].split('.')[0]
-    saveDir = os.path.join(fileLoc, fileName)
-    os.makedirs(saveDir, exist_ok=True)
     try:
         allData.to_csv(saveDir + '/allData.csv', index=False)
     except FileExistsError:
-        continue
+        print('File already exists')
     
 ###################
     
@@ -138,7 +141,7 @@ for file in dirList:
     plt.xlabel('Trial Number')
     plt.xticks(np.arange(1, len(aveRTList)+1))
     plt.ylabel('Reaction time (ms)')
-    plt.title('Change in reaction time across all trial sequences')
+    plt.title(f'Change in reaction time across all trial sequences of {fileName}')
     fig1 = plt.gcf()
     plt.show(block=False)
     plt.pause(2)
@@ -146,9 +149,8 @@ for file in dirList:
     try:
         fig1.savefig(saveDir + '/allTrials.png', bbox_inches='tight')
     except FileExistsError:
-        continue
-       
-    
+        print('File already exists')
+          
     ## 2. Change in reaction time across trials for each unique transition
     ### First: set up data
     uniqueTrans = np.unique(transList)[1:].tolist() # Creates an array of all unique items from transList, omitting the first np.nan value
@@ -188,24 +190,20 @@ for file in dirList:
             plt.xlabel('Trial Number')
             plt.xticks(col1) # sets x-axis to go in intervals of 1
             plt.ylabel('Reaction time (ms)')
-            plt.title(f'Change in reaction time across trials of {keyTransition}')
+            plt.title(f'Change in reaction time across trials of {fileName} for {keyTransition}')
             figs = plt.gcf()
-            plt.show(block=False)
-            plt.pause(2)
-            plt.close()
             try:
                 figs.savefig(saveDir + f'/{keyTransition}.png', bbox_inches='tight')
             except FileExistsError:
-                continue
-            
-            
-    ## 4. Success rate within each sequence across the session
+                print('File already exists')
+                       
+    ## 3. Success rate within each sequence across the session
     arrayCorrect = exData['correct'].to_numpy() # isolates correct column into array
     ### NOTE: correct column encodes either 1 (correct response) or 0 (incorrect response)
     ### an average of 1 = perfect responses (no errors)
     perTrial = list(divide_chunks(arrayCorrect, 12)) # use divide_chunks function to divide arrayCorrect into chunks of size 12
     aveCorr = [average(i) for i in perTrial] # calculate average of each chunk
-    aveCorrTotal = average(aveCorr) # calculate total average correct
+    srDF[fileName] = aveCorr # Append aveCorr to srDF as a column
     ### Create dataframe showing average success rate for each trial sequence
     successRates = pd.DataFrame({'Trial #':trials, 'Success Rate':aveCorr})
     ### Plot success rate
@@ -215,7 +213,7 @@ for file in dirList:
     plt.xticks(trials)
     plt.ylabel('Success Rate')
     plt.yticks([0, 0.5, 1.0])
-    plt.title('Average success rates for each trial')
+    plt.title(f'Average success rates for each trial of {fileName}')
     figSR = plt.gcf()
     plt.show(block=False)
     plt.pause(2)
@@ -223,19 +221,48 @@ for file in dirList:
     try:
         figSR.savefig(saveDir + '/successRate.png', bbox_inches='tight')
     except FileExistsError:
-        continue
+        print('File already exists')
 
 ###################
 
-# Plot and save aggregate average RTs
-aggDF['Mean'] = aggDF.mean(axis=1)
-plt.plot(np.arange(1, len(aveRTList)+1), aggDF['Mean'])
+# Save surveyDF to csv
+surveyDF = surveyDF.transpose() # transpose for easier viewing
+try: 
+    surveyDF.to_csv(saveLoc + '/allSurveyData.csv')
+except FileExistsError:
+    print('File already exists')
+
+# Plot aggregate data
+## Plot and save aggregate average RTs
+aggDF[aggDF >= 750] = np.nan # convert all rts >= 750 to nan (since those are the misses - late responses)
+### from: https://stackoverflow.com/questions/43757977/replacing-values-greater-than-a-number-in-pandas-dataframe
+aggDF['Mean'] = aggDF.mean(axis=1) # Create column taking the mean of each row (trial)
+plt.plot(trials, aggDF['Mean'])
 plt.xlabel('Trial Number')
-plt.xticks(np.arange(1, len(aveRTList)+1))
-plt.ylabel('Reaction time (ms)')
+plt.xticks(trials)
+plt.ylabel('Average reaction time (ms)')
 plt.title('Change in average response times per trial across all participants')
 figAve = plt.gcf()
 plt.show(block=False)
 plt.pause(2)
 plt.close()
-figAve.savefig(fileLoc + '/aggRTs.png', bbox_inches='tight')
+try:
+    figAve.savefig(saveLoc + '/aggRTs.png', bbox_inches='tight')
+except FileExistsError:
+    print('File already exists')
+## Plot and save aggregate success rates
+srDF['Mean'] = srDF.mean(axis=1) # Create column taking the mean of each row (trial)
+plt.plot(trials, srDF['Mean'])
+plt.xlabel('Trial Number')
+plt.xticks(trials)
+plt.ylabel('Average success rate')
+plt.yticks([0, 0.5, 1.0])
+plt.title('Average success rates for each trial across all participants')
+figAggSR = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+try:
+    figAggSR.savefig(saveLoc + '/aggSRs.png', bbox_inches='tight')
+except FileExistsError:
+    print('File already exists')
