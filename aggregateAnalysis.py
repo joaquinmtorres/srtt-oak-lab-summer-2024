@@ -131,7 +131,7 @@ for file in dirList:
                 continue
             else: # when the for loop moves to a new trial #
                 rtPerTrial.append(trialRTs) # add trialRTs to larger array
-                trialStep += 1 # move onto next trial #
+                trialStep += 1 # move onto next trial 
                 trialRTs = [] # reset for next iteration
                 trialRTs.append(dfTrans['RT'][step]) # ensures current row's RT also gets added to new trialRTs list
                 step += 1 # move onto next row
@@ -199,6 +199,7 @@ for file in dirList:
                 figs = plt.gcf()
                 try:
                     figs.savefig(saveDir + f'/{keyTransition}.png', bbox_inches='tight')
+                    plt.close()
                 except FileExistsError:
                     print('File already exists')
                            
@@ -240,7 +241,6 @@ except FileExistsError:
 # Plot aggregate data
 ## Plot and save aggregate average RTs
 aggDF[aggDF >= 750] = np.nan # convert all rts >= 750 to nan (since those are the misses - late responses)
-### from: https://stackoverflow.com/questions/43757977/replacing-values-greater-than-a-number-in-pandas-dataframe
 aggDF['Mean'] = aggDF.mean(axis=1) # Create column taking the mean of each row (trial)
 plt.plot(trials, aggDF['Mean'])
 plt.xlabel('Trial Number')
