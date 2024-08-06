@@ -34,11 +34,13 @@ dirList = sorted(glob.glob(fileLoc + '/*'))
 saveLoc = dirname(dirname(fileLoc)) # Files are in a folder named 'data', and we want everything to be saved at the directory before this folder
 
 # Set up aggregate dataframes
-trials = np.arange(1, 36) # Set an array of trial numbers
-aggDF = pd.DataFrame(index=trials) # Set df with index as trial numbers for aggregated average RTs per trial
-srDF = pd.DataFrame(index=trials) # Set df with index as trial numbers for aggregated average success rates per trial
-aggMiss = pd.DataFrame(index=trials) # Set df with index as trial numbers for aggregated miss rates (RT >= 1000) per trial
-aggInc = pd.DataFrame(index=trials) # Set df with index as trial numbers for aggregated incorrect rates (wrong key press within time limit) per trial
+trials = np.arange(1, 36) # Trial numbers
+aggDF = pd.DataFrame(index=trials) # aggregated average RTs per trial
+srDF = pd.DataFrame(index=trials) # aggregated average success rates per trial
+aggMiss = pd.DataFrame(index=trials) # aggregated miss rates (RT >= 1000) per trial
+aggInc = pd.DataFrame(index=trials) # aggregated incorrect rates (wrong key press within time limit) per trial
+patternAware = pd.DataFrame(index=trials)  # aggregated rts of participants who responded aware of a sequence
+patternUnaware = pd.DataFrame(index=trials) # aggregated rts of participants who responded unaware or unsure of a sequence
 surveyDF = pd.DataFrame() # Set empty df for aggregated survey Data
 
 ###################
@@ -64,7 +66,7 @@ for file in dirList:
                                'Tourettes_diagnosis', 'Medication',  'sleep_dropdown', 
                                'sleepiness', 'caffeine_consumption', 
                                'drug_consumption', 'modEx_dropdown', 'vigEx_dropdown', 
-                               'vision_type']].iloc[-1] # Only call last row (which has the responses)
+                               'vision_type', 'comments']].iloc[-1] # Only call last row (which has the responses)
         surveyDF[fileName] = surveyData # Append survey data into surveyDF dataframe
         ## Then experimental data
         exData = df[['empty_column', 'response', 'correct', 'response_time', 
@@ -79,7 +81,7 @@ for file in dirList:
         
         ## 2. Trial Number (trialNum)
         ### Create array where each trial number (1-35) are multiplied by the number of items in one sequence (12)
-        trialNum = np.arange(1, 36).repeat(12)
+        trialNum = trials.repeat(12)
         
         ## 3. Key Transitions (transList)
         count = 0 # initialize count
@@ -143,10 +145,15 @@ for file in dirList:
                 continue
         ##### Note: the last trial's RTs is not appended yet, so the following is needed
         rtPerTrial.append(trialRTs)
-        ### Plot the average RT of each trial
+        ### Sorting
         aveRTList = [average(j) for j in rtPerTrial] # make array of average RTs of each trial
         aggDF[fileName] = aveRTList # Append aveRTList to aggDF as a column    
-        aveRTDF = pd.DataFrame({'Trial Number':np.arange(1,len(aveRTList)+1), 'Average RT':aveRTList}) # creates a dataframe
+        #### sort into patternAware or patternUnaware
+        if surveyData['survey_awareness'] == 'awarenessYes':
+            patternAware[fileName] = aveRTList
+        else:
+            patternUnaware[fileName] = aveRTList
+        ### Plot the average RT of each trial
         plt.plot(trials, aveRTList)
         plt.xlabel('Trial Number')
         plt.xticks(np.arange(1, len(aveRTList)+1))
@@ -160,79 +167,8 @@ for file in dirList:
             fig1.savefig(saveDir + '/allTrials.png', bbox_inches='tight')
         except FileExistsError:
             print('File already exists')
-              
-        ## 2. Change in reaction time across trials for each unique transition
-        ### First: set up data
-        uniqueTrans = np.unique(transList)[1:].tolist() # Creates an array of all unique items from transList, omitting the first np.nan value
-        ### Create dataframe setting an index to each uniqueTrans item
-        indexDF = pd.DataFrame({'index':np.arange(0,len(uniqueTrans)), 'uniqueTransitions':uniqueTrans})
-        ### This for loop iterates through each transition in transList, compares it with each uniqueTransition, and if yes appends the RT2 to the column of corresponding uniqueTransition in rtDF
-        #### code adapted from: https://stackoverflow.com/questions/53317739/adding-value-to-only-a-single-column-in-pandas-dataframe
-        #### and https://stackoverflow.com/questions/25941979/remove-nan-cells-without-dropping-the-entire-row-pandas-python3
-        rtDF = pd.DataFrame(columns = np.arange(0, len(uniqueTrans))) # create empty dataframe with column names as indices (of each unique transition according to indexDF)
-        for k in range(0, len(allData)):
-             for l in range(0, len(uniqueTrans)):
-                 if uniqueTrans[l] == allData['Key Transition'][k]:
-                     rtDF = rtDF.append({l:allData['Response Time'][k]}, ignore_index=True)
-                 else:
-                     continue
-        #### This for loop appends a value to each row, so each row would have one RT2 in one column, while the rest is NaN
-        #### To clean up NaN values:
-        rtDF = rtDF.apply(lambda x: pd.Series(x.dropna().values)) # removes most NaN values
-        rtDF = rtDF.fillna('') # replaces remaining NaN values with empty strings
-        ### Create a dataframe containing uniqueTransitions (from indexDF) and RT2 values (from rtDF)
-        rtDF = rtDF.transpose() # transpose datatframe, so that it can easily merge with indexDF
-        finalDF = indexDF.join(rtDF) # merge indexDF and rtDF into one dataframe
-        finalDF = finalDF.drop('index', axis=1) # delete index column, so the first column is uniqueTransitions
-        finalDF = finalDF.transpose() # transpose dataframe so that uniqueTransitions can be pseudo-column names
-        
-        ### Then plot data
-        for column in finalDF:
-            # reset all values
-            col1 = []
-            col2 = []
-            col2 = finalDF[column][1:] # picks a column and creates an array of only the RTs
-            col2 = col2[col2!=''].astype(int) # deletes all the empty strings
-            if len(col2) > 1: # this code only plots for key transitions where there's 2 or more saved RTs
-                col1 = range(1, len(col2)+1)
-                keyTransition = uniqueTrans[column]
-                plt.plot(col1, col2)
-                plt.xlabel('Trial Number')
-                plt.xticks(col1) # sets x-axis to go in intervals of 1
-                plt.ylabel('Reaction time (ms)')
-                plt.title(f'Change in reaction time across trials of {fileName} for {keyTransition}')
-                figs = plt.gcf()
-                try:
-                    figs.savefig(saveDir + f'/{keyTransition}.png', bbox_inches='tight')
-                    plt.close()
-                except FileExistsError:
-                    print('File already exists')
                            
-        ## 3. Success rate within each sequence across the session
-        arrayCorrect = exData['correct'].to_numpy() # isolates correct column into array
-        ### NOTE: correct column encodes either 1 (correct response) or 0 (incorrect response)
-        ### an average of 1 = perfect responses (no errors)
-        perTrial1 = list(divide_chunks(arrayCorrect, 12)) # use divide_chunks function to divide arrayCorrect into chunks of size 12
-        aveCorr = [average(m) for m in perTrial1] # calculate average of each chunk
-        srDF[fileName] = aveCorr # Append aveCorr to srDF as a column
-        ### Plot success rate
-        plt.figure() # reset figure
-        plt.plot(trials, aveCorr)
-        plt.xlabel('Trial Number')
-        plt.xticks(trials)
-        plt.ylabel('Success Rate')
-        plt.yticks([0, 0.5, 1.0])
-        plt.title(f'Average success rates for each trial of {fileName}')
-        figSR = plt.gcf()
-        plt.show(block=False)
-        plt.pause(2)
-        plt.close()
-        try:
-            figSR.savefig(saveDir + '/successRate.png', bbox_inches='tight')
-        except FileExistsError:
-            print('File already exists')
-            
-        ## 4. Incorrect rate (wrong key press within time limit of 1000 ms) within each sequence across the session
+        ## 2. Hit/miss rates within each sequence across the session
         corrDF = pd.DataFrame({'Acc':corr, 'RT':rt}) # create df with necessary info
         corrArr = [] # set empty array where values will be either corr (correct and w/in time limit), inc (incorrect and w/in time limit), or miss (exceeds time limit)
         ### Assign corr, inc, or miss to each index
@@ -243,45 +179,33 @@ for file in dirList:
                 corrArr.append('inc')
             if corrDF['Acc'][index] == 0 and corrDF['RT'][index] >= 1000:
                 corrArr.append('miss')
-        perTrial2 = list(divide_chunks(corrArr, 12)) # use divide_chunks function to divide corrArr into chunks of size 12
-        incRatePerTrial = [n.count('inc')/12 for n in perTrial2] # Create an array that takes each sequence from perTrial2 and calculates the inc rate per trial
+        perTrial = list(divide_chunks(corrArr, 12)) # use divide_chunks function to divide corrArr into chunks of size 12
+        corrRatePerTrial = [n.count('corr')/12 for n in perTrial] # Create an array that gets correct rate for each trial in perTrial
+        srDF[fileName] = corrRatePerTrial # Append aveCorr to srDF as a column
+        incRatePerTrial = [o.count('inc')/12 for o in perTrial] # Create an array that gets incorrect rate for each trial in perTrial
         aggInc[fileName] = incRatePerTrial # Append incRatePerTrial to aggInc as a column
-        ### Plot incorrect rate
-        plt.figure() # reset figure
-        plt.plot(trials, incRatePerTrial)
-        plt.xlabel('Trial Number')
-        plt.xticks(trials)
-        plt.ylabel('Incorrect Rate')
-        plt.yticks([0, 0.5, 1.0])
-        plt.title(f'Average incorrect rates for each trial of {fileName}')
-        figIR = plt.gcf()
-        plt.show(block=False)
-        plt.pause(2)
-        plt.close()
-        try:
-            figIR.savefig(saveDir + '/incorrectRate.png', bbox_inches='tight')
-        except FileExistsError:
-            print('File already exists')
-        
-        ## 5. Miss rate (rt exceeds time limit of 1000 ms) within each sequence across the session
-        missRatePerTrial = [o.count('miss')/12 for o in perTrial2] # Create an array calculating miss rate for each sequence in perTrial2
+        missRatePerTrial = [p.count('miss')/12 for p in perTrial] # Create an array that gets miss rate for each trial in perTrial
         aggMiss[fileName] = missRatePerTrial # Append missRatePerTrial to aggMiss as a column
-        ### Plot miss rate
-        plt.figure() # reset figure
-        plt.plot(trials, missRatePerTrial)
+            
+        ## 3. Plot success/incorrect/miss rates in one figure
+        plt.figure() # reset
+        plt.plot(trials, corrRatePerTrial, color='g', label='success') # Success rate
+        plt.plot(trials, incRatePerTrial, color='r', label='incorrect') # Incorrect rate
+        plt.plot(trials, missRatePerTrial, color='b', label='miss') # Miss rate
         plt.xlabel('Trial Number')
         plt.xticks(trials)
-        plt.ylabel('Miss Rate')
+        plt.ylabel('Rate')
         plt.yticks([0, 0.5, 1.0])
-        plt.title(f'Average miss rates for each trial of {fileName}')
-        figMR = plt.gcf()
+        plt.title(f'Average hit/miss rates for each trial of {fileName}')
+        plt.legend()
+        figRates = plt.gcf()
         plt.show(block=False)
         plt.pause(2)
         plt.close()
         try:
-            figMR.savefig(saveDir + '/missRate.png', bbox_inches='tight')
+            figRates.savefig(saveDir + '/rates.png', bbox_inches='tight')
         except FileExistsError:
-            print('File already exists')        
+            print('File already exists') 
 
 ###################
 
@@ -302,69 +226,86 @@ plt.errorbar(trials, aggDF['Mean'], yerr=aggDF['SEM'], fmt='.r', ecolor='red', e
 plt.xlabel('Trial Number')
 plt.xticks(trials)
 plt.ylabel('Average reaction time (ms)')
-plt.title('Change in average response times per trial across all participants')
 figAve = plt.gcf()
 plt.show(block=False)
 plt.pause(2)
 plt.close()
 try:
-    figAve.savefig(saveLoc + '/aggRTs.png', bbox_inches='tight')
+    figAve.savefig(saveLoc + '/allRTs.png', bbox_inches='tight')
+except FileExistsError:
+    print('File already exists')
+## Get averages of last 5 training blocks and 5 test blocks for comparison
+lastDF = pd.DataFrame({'Last 5 training blocks':aggDF['Mean'][-10:-5], 'Test blocks':aggDF['Mean'][-5:]})
+lastDF = lastDF.apply(lambda x: pd.Series(x.dropna().values)) # removes NaN values and resets index
+plt.figure() # reset
+plt.boxplot(lastDF)
+plt.xticks([1,2], ['Average of last 5 training blocks', 'Average of test blocks'])
+plt.ylabel('Response time (ms)')
+figLast = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+try:
+    figLast.savefig(saveLoc + '/learning.png', bbox_inches='tight')
 except FileExistsError:
     print('File already exists')
     
-## Plot and save aggregate success rates
+## Plot: comparison of RTs between participants aware of sequence vs. unaware/unsure
+### Get means and SEM
+#### patternAware
+patternAware['Mean'] = patternAware.mean(axis=1) # Create column taking the mean of each row (trial)
+patternAware['SEM'] = patternAware.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+#### patternUnaware
+patternUnaware['Mean'] = patternUnaware.mean(axis=1) # Create column taking the mean of each row (trial)
+patternUnaware['SEM'] = patternUnaware.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+### Plot data
+plt.figure() # reset
+plt.plot(trials, patternAware['Mean'], color='g', label='Aware')
+plt.errorbar(trials, patternAware['Mean'], yerr=patternAware['SEM'], fmt='.g', elinewidth=0.5) # aware of pattern
+plt.plot(trials, patternUnaware['Mean'], color='r', label='Unaware')
+plt.errorbar(trials, patternUnaware['Mean'], yerr=patternUnaware['SEM'], fmt='.r', elinewidth=0.5) # unaware/unsure of pattern
+plt.xlabel('Trial Number')
+plt.xticks(trials)
+plt.ylabel('Average reaction time (ms)')
+plt.legend()
+figAware = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+try:
+    figAware.savefig(saveLoc + '/awareness.png', bbox_inches='tight')
+except FileExistsError:
+    print('File already exists')
+    
+## Plot and save aggregate hit/miss rates
+### Get means and SEM
+#### success rate
 srDF['Mean'] = srDF.mean(axis=1) # Create column taking the mean of each row (trial)
 srDF['SEM'] = srDF.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
-plt.plot(trials, srDF['Mean'])
-plt.errorbar(trials, srDF['Mean'], yerr=srDF['SEM'], fmt='.r', ecolor='red', elinewidth=0.5)
-plt.xlabel('Trial Number')
-plt.xticks(trials)
-plt.ylabel('Average success rate')
-plt.yticks([0, 0.5, 1.0])
-plt.title('Average success rates for each trial across all participants')
-figAggSR = plt.gcf()
-plt.show(block=False)
-plt.pause(2)
-plt.close()
-try:
-    figAggSR.savefig(saveLoc + '/aggSRs.png', bbox_inches='tight')
-except FileExistsError:
-    print('File already exists')
-
-## Plot and save aggregate incorrect rates
+#### incorrect rate
 aggInc['Mean'] = aggInc.mean(axis=1) # Create column taking the mean of each row (trial)
 aggInc['SEM'] = aggInc.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
-plt.plot(trials, aggInc['Mean'])
-plt.errorbar(trials, aggInc['Mean'], yerr=aggInc['SEM'], fmt='.r', ecolor='red', elinewidth=0.5)
-plt.xlabel('Trial Number')
-plt.xticks(trials)
-plt.ylabel('Average incorrect rate')
-plt.yticks([0, 0.5, 1.0])
-plt.title('Average incorrect rates for each trial across all participants')
-figAggIR = plt.gcf()
-plt.show(block=False)
-plt.pause(2)
-plt.close()
-try:
-    figAggIR.savefig(saveLoc + '/aggIRs.png', bbox_inches='tight')
-except FileExistsError:
-    print('File already exists')
-    
-## Plot and save aggregate miss rates
+#### miss rate
 aggMiss['Mean'] = aggMiss.mean(axis=1) # Create column taking the mean of each row (trial)
 aggMiss['SEM'] = aggMiss.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
-plt.plot(trials, aggMiss['Mean'])
-plt.errorbar(trials, aggMiss['Mean'], yerr=aggMiss['SEM'], fmt='.r', ecolor='red', elinewidth=0.5)
+### Plot data
+plt.figure() # reset
+plt.plot(trials, srDF['Mean'], color='g', label='success')
+plt.errorbar(trials, srDF['Mean'], yerr=srDF['SEM'], fmt='.g', ecolor='g', elinewidth=0.5) # success rates
+plt.plot(trials, aggInc['Mean'], color='r', label='incorrect')
+plt.errorbar(trials, aggInc['Mean'], yerr=aggInc['SEM'], fmt='.r', ecolor='r', elinewidth=0.5) # incorrect rates
+plt.plot(trials, aggMiss['Mean'], color='b', label='miss')
+plt.errorbar(trials, aggMiss['Mean'], yerr=aggMiss['SEM'], fmt='.b', ecolor='b', elinewidth=0.5) # miss rates
 plt.xlabel('Trial Number')
 plt.xticks(trials)
-plt.ylabel('Average miss rate')
+plt.ylabel('Average hit/miss rates')
 plt.yticks([0, 0.5, 1.0])
-plt.title('Average miss rates for each trial across all participants')
-figAggMR = plt.gcf()
+plt.legend()
+figAggRates = plt.gcf()
 plt.show(block=False)
 plt.pause(2)
 plt.close()
 try:
-    figAggMR.savefig(saveLoc + '/aggMRs.png', bbox_inches='tight')
+    figAggRates.savefig(saveLoc + '/allHitRates.png', bbox_inches='tight')
 except FileExistsError:
     print('File already exists')
