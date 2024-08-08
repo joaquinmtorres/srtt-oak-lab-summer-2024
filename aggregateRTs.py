@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import glob
+from statsmodels.stats.anova import AnovaRM 
+from os.path import dirname
 
 # Helper Functions
 ## Average calculator
@@ -26,9 +28,10 @@ def divide_chunks(l, n):
     for x in range(0, len(l), n):  
         yield l[x:x + n] 
         
-# Define file path
-fileLoc = '/Users/joaqu/OneDrive/Documents/Bates/Kim Lab/dataFiles/20240806 All/'
+# Define file paths
+fileLoc = '/Users/joaqu/OneDrive/Documents/Bates/Kim Lab/dataFiles/20240806 All/data/'
 dirList = sorted(glob.glob(fileLoc + '/*'))
+saveLoc = dirname(dirname(fileLoc)) # Files are in a folder named 'data', and we want everything to be saved at the directory before this folder
 
 # Set up aggregate dataframes
 trials = np.arange(1, 36) # Trial numbers
@@ -92,7 +95,7 @@ for file in dirList:
 
 # Save surveyDF to csv
 surveyDF = surveyDF.transpose() # transpose for easier viewing
-surveyDF.to_csv(fileLoc + '/allSurveyData.csv')
+surveyDF.to_csv(saveLoc + '/allSurveyData.csv', index=False)
     
 # Take means and SEM
 ## OA
@@ -119,4 +122,69 @@ figAve = plt.gcf()
 plt.show(block=False)
 plt.pause(2)
 plt.close()
-figAve.savefig(fileLoc + '/allRTs.png', bbox_inches='tight')
+figAve.savefig(saveLoc + '/allRTs.png', bbox_inches='tight')
+
+###########
+
+# Statistical test
+# Define file path
+fileLoc = '/Users/joaqu/OneDrive/Documents/Bates/Kim Lab/dataFiles/20240806 All/data/'
+dirList = sorted(glob.glob(fileLoc + '/*'))
+saveLoc = dirname(dirname(fileLoc)) # Files are in a folder named 'data', and we want everything to be saved at the directory before this folder
+
+# Create empty arrays to append to
+participants = []
+rtData = []
+phase = []
+ageGroup = []
+
+# Loop through each file
+for file in dirList:
+    df = pd.read_csv(file)
+    
+    # Set file names and save directories
+    fileName = file.split('/')[-1:][0].split('\\')[1].split('.')[0]
+    
+    # Clean up dataframe by only keeping necessary columns
+    ## First: survey data
+    surveyData = df[['survey_awareness', 'survey_order', 'gender', 
+                           'age_dropdown', 'race', 'ethnicity', 'ADHD_diagnosis', 
+                           'Tourettes_diagnosis', 'Medication',  'sleep_dropdown', 
+                           'sleepiness', 'caffeine_consumption', 
+                           'drug_consumption', 'modEx_dropdown', 'vigEx_dropdown', 
+                           'vision_type', 'comments']].iloc[-1] # Only call last row (which has the responses)
+    surveyDF[fileName] = surveyData # Append survey data into surveyDF dataframe
+    ## Then experimental data
+    exData = df[['empty_column', 'response', 'correct', 'response_time', 
+                       'accuracy', 'average_response_time', 'total_response_time']].iloc[:-1] # omits final unnecessary row
+    exData = exData[-420:].reset_index(drop=True).replace('None', np.nan) # omits practice trial rows, then resets index and replaces 'None' objects with nan
+    ### NOTE: empty_column refers to the specific key that is displayed (stimulus)
+    
+    # Append participants array with fileName twice
+    participants.append(fileName)
+    participants.append(fileName)
+    
+    # Calculate average RT data for last 5 training and 5 test and append each to rtData
+    trainAve = exData['response_time'][-10:-5].mean()
+    rtData.append(trainAve)
+    testAve = exData['response_time'][-5:].mean()
+    rtData.append(testAve)
+    
+    # Append phases to phase array
+    phase.append('train')
+    phase.append('test')
+    
+    # Determine age group and append to ageGroup twice
+    if surveyData['age_dropdown'] >= 65:
+        age = 'OA'
+    else:
+        age = 'YA'
+    ageGroup.append(age)
+    ageGroup.append(age)
+
+# Create dataframe with using the arrays created
+statsDF = pd.DataFrame({'Participant':participants, 'RT':rtData, 'Phase':phase, 'Age Group':ageGroup})
+statsDF.to_csv(saveLoc+'/allStatsData.csv', index=False)
+
+# Run stats test (repeated measures ANOVA)
+print(AnovaRM(data=statsDF, depvar='RT', subject='Participant', within=['Phase']).fit())
