@@ -109,10 +109,10 @@ yaRTs['SEM'] = yaRTs.iloc[:, :-1].sem(axis=1) # Create a column calculating the 
 
 # Plot data
 plt.figure()
-plt.plot(trials, oaRTs['Mean'], color='b', label='older adults')
-plt.errorbar(trials, oaRTs['Mean'], yerr=oaRTs['SEM'], fmt='.b', ecolor='b', elinewidth=0.5)
-plt.plot(trials, yaRTs['Mean'], color='r', label='younger adults')
-plt.errorbar(trials, yaRTs['Mean'], yerr=yaRTs['SEM'], fmt='.r', ecolor='r', elinewidth=0.5)
+plt.plot(trials, oaRTs['Mean'].values, color='b', label='older adults')
+plt.errorbar(trials, oaRTs['Mean'].values, yerr=oaRTs['SEM'].values, fmt='.b', ecolor='b', elinewidth=0.5)
+plt.plot(trials, yaRTs['Mean'].values, color='r', label='younger adults')
+plt.errorbar(trials, yaRTs['Mean'].values, yerr=yaRTs['SEM'].values, fmt='.r', ecolor='r', elinewidth=0.5)
 plt.xlabel('Trial Number')
 plt.xticks(trials)
 plt.ylabel('Average reaction time (ms)')
@@ -165,9 +165,11 @@ for file in dirList:
     participants.append(fileName)
     
     # Calculate average RT data for last 5 training and 5 test and append each to rtData
-    trainAve = exData['response_time'][-10:-5].mean()
+    rtArr = exData['response_time'] # Get rt data into an array
+    rtArr[rtArr > 1000] = np.nan # convert rts greater than 1000ms (misses) to np.nan    
+    trainAve = rtArr[-10:-5].mean()
     rtData.append(trainAve)
-    testAve = exData['response_time'][-5:].mean()
+    testAve = rtArr[-5:].mean()
     rtData.append(testAve)
     
     # Append phases to phase array

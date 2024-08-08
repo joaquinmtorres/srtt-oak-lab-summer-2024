@@ -212,7 +212,7 @@ for file in dirList:
 # Save surveyDF to csv
 surveyDF = surveyDF.transpose() # transpose for easier viewing
 try: 
-    surveyDF.to_csv(saveLoc + '/allSurveyData.csv')
+    surveyDF.to_csv(saveLoc + '/allSurveyData.csv', index=False)
 except FileExistsError:
     print('File already exists')
 
@@ -221,8 +221,8 @@ except FileExistsError:
 aggDF[aggDF >= 1000] = np.nan # convert all rts >= 750 to nan (since those are the misses - late responses)
 aggDF['Mean'] = aggDF.mean(axis=1) # Create column taking the mean of each row (trial)
 aggDF['SEM'] = aggDF.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
-plt.plot(trials, aggDF['Mean'])
-plt.errorbar(trials, aggDF['Mean'], yerr=aggDF['SEM'], fmt='.r', ecolor='red', elinewidth=0.5)
+plt.plot(trials, aggDF['Mean'].values)
+plt.errorbar(trials, aggDF['Mean'].values, yerr=aggDF['SEM'].values, fmt='.r', ecolor='red', elinewidth=0.5)
 plt.xlabel('Trial Number')
 plt.xticks(trials)
 plt.ylabel('Average reaction time (ms)')
@@ -235,7 +235,7 @@ try:
 except FileExistsError:
     print('File already exists')
 ## Get averages of last 5 training blocks and 5 test blocks for comparison
-lastDF = pd.DataFrame({'Last 5 training blocks':aggDF['Mean'][-10:-5], 'Test blocks':aggDF['Mean'][-5:]})
+lastDF = pd.DataFrame({'Last 5 training blocks':aggDF['Mean'][-10:-5].values, 'Test blocks':aggDF['Mean'][-5:].values})
 lastDF = lastDF.apply(lambda x: pd.Series(x.dropna().values)) # removes NaN values and resets index
 plt.figure() # reset
 plt.boxplot(lastDF)
@@ -260,10 +260,10 @@ patternUnaware['Mean'] = patternUnaware.mean(axis=1) # Create column taking the 
 patternUnaware['SEM'] = patternUnaware.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
 ### Plot data
 plt.figure() # reset
-plt.plot(trials, patternAware['Mean'], color='g', label='Aware')
-plt.errorbar(trials, patternAware['Mean'], yerr=patternAware['SEM'], fmt='.g', elinewidth=0.5) # aware of pattern
-plt.plot(trials, patternUnaware['Mean'], color='r', label='Unaware')
-plt.errorbar(trials, patternUnaware['Mean'], yerr=patternUnaware['SEM'], fmt='.r', elinewidth=0.5) # unaware/unsure of pattern
+plt.plot(trials, patternAware['Mean'].values, color='g', label='Aware')
+plt.errorbar(trials, patternAware['Mean'].values, yerr=patternAware['SEM'].values, fmt='.g', elinewidth=0.5) # aware of pattern
+plt.plot(trials, patternUnaware['Mean'].values, color='r', label='Unaware')
+plt.errorbar(trials, patternUnaware['Mean'].values, yerr=patternUnaware['SEM'].values, fmt='.r', elinewidth=0.5) # unaware/unsure of pattern
 plt.xlabel('Trial Number')
 plt.xticks(trials)
 plt.ylabel('Average reaction time (ms)')
@@ -290,12 +290,12 @@ aggMiss['Mean'] = aggMiss.mean(axis=1) # Create column taking the mean of each r
 aggMiss['SEM'] = aggMiss.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
 ### Plot data
 plt.figure() # reset
-plt.plot(trials, srDF['Mean'], color='g', label='success')
-plt.errorbar(trials, srDF['Mean'], yerr=srDF['SEM'], fmt='.g', ecolor='g', elinewidth=0.5) # success rates
-plt.plot(trials, aggInc['Mean'], color='r', label='incorrect')
-plt.errorbar(trials, aggInc['Mean'], yerr=aggInc['SEM'], fmt='.r', ecolor='r', elinewidth=0.5) # incorrect rates
-plt.plot(trials, aggMiss['Mean'], color='b', label='miss')
-plt.errorbar(trials, aggMiss['Mean'], yerr=aggMiss['SEM'], fmt='.b', ecolor='b', elinewidth=0.5) # miss rates
+plt.plot(trials, srDF['Mean'].values, color='g', label='success')
+plt.errorbar(trials, srDF['Mean'].values, yerr=srDF['SEM'].values, fmt='.g', ecolor='g', elinewidth=0.5) # success rates
+plt.plot(trials, aggInc['Mean'].values, color='r', label='incorrect')
+plt.errorbar(trials, aggInc['Mean'].values, yerr=aggInc['SEM'].values, fmt='.r', ecolor='r', elinewidth=0.5) # incorrect rates
+plt.plot(trials, aggMiss['Mean'].values, color='b', label='miss')
+plt.errorbar(trials, aggMiss['Mean'].values, yerr=aggMiss['SEM'].values, fmt='.b', ecolor='b', elinewidth=0.5) # miss rates
 plt.xlabel('Trial Number')
 plt.xticks(trials)
 plt.ylabel('Average hit/miss rates')
