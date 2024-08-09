@@ -9,10 +9,13 @@ Consolidating all analyses into one code, including:
     - average correct/incorrect/miss rates per trial
     - difference in RT change per trial between pattern aware vs. unaware
     - difference in average RTs between last 5 training blocks vs. test blocks
-    - change in rushed response rates per trial
-As well as stats test
+    - change in rushed response rate per trial
+    - change in reward rate per trial
+    - change in punishment rate per trial
+    - stats test (a/o 20240809, only the dataframe for stats is included)
 
-Current version of this code does not omit misses (i.e. RT > 1000ms)
+Current version of this code does not omit misses (i.e. RT > 1000ms). This 
+could easily be implemented by uncommenting line 129 (rt array)
 """
 
 # Import libraries
@@ -22,7 +25,6 @@ import matplotlib.pyplot as plt
 import os
 import glob
 from os.path import dirname
-import math
 
 # Helper Functions
 ## Breaks list into chunks of size n
@@ -50,6 +52,8 @@ incRateOA = pd.DataFrame(index=trials) # average incorrect rates (wrong key pres
 pattAwOA = pd.DataFrame(index=trials)  # rts of participants who responded aware of a sequence
 pattUnOA = pd.DataFrame(index=trials) # rts of participants who responded unaware or unsure of a sequence
 rushProbOA = pd.DataFrame(index=trials) # probability of rushed response (rt < 500 ms) per trial
+rewardRateOA = pd.DataFrame(index=trials) # probability of reward (ding) per trial
+punishRateOA = pd.DataFrame(index=trials) # probability punished per trial
 ## YA Data
 yaRTs = pd.DataFrame(index=trials) # for response times (same figure with oaRTs)
 corrRateYA = pd.DataFrame(index=trials) # average success rates per trial
@@ -58,10 +62,13 @@ incRateYA = pd.DataFrame(index=trials) # average incorrect rates (wrong key pres
 pattAwYA = pd.DataFrame(index=trials)  # rts of participants who responded aware of a sequence
 pattUnYA = pd.DataFrame(index=trials) # aggregated rts of participants who responded unaware or unsure of a sequence
 rushProbYA = pd.DataFrame(index=trials) # probability of rushed response (rt < 500 ms) per trial
+rewardRateYA = pd.DataFrame(index=trials) # probability of reward (ding) per trial
+punishRateYA = pd.DataFrame(index=trials) # probability punished per trial
 
 # Set empty arrays for stats test
 participants = []
 rtData = []
+missRates = []
 phase = []
 ageGroup = []
 
@@ -176,6 +183,21 @@ for file in dirList:
     corrRatePerTrial = [n.count('corr')/12 for n in perTrial] # Create an array that gets correct rate for each trial in perTrial
     incRatePerTrial = [o.count('inc')/12 for o in perTrial] # Create an array that gets incorrect rate for each trial in perTrial
     missRatePerTrial = [p.count('miss')/12 for p in perTrial] # Create an array that gets miss rate for each trial in perTrial
+    ## Plot individual data
+    plt.figure() # reset
+    plt.plot(trials, corrRatePerTrial, color='g', label='correct')
+    plt.plot(trials, incRatePerTrial, color='r', label='incorrect')
+    plt.plot(trials, missRatePerTrial, color='b', label='miss')
+    plt.xlabel('Trial Number')
+    plt.xticks(trials)
+    plt.ylabel('Probability')
+    plt.yticks([0, 0.5, 1.0])
+    plt.title(f'Change in average correct/incorrect/miss rates of {fileName}')
+    plt.legend()
+    figHitIndiv = plt.gcf()
+    figHitIndiv.savefig(saveDir + f'/hitRates {fileName}.png', bbox_inches='tight')
+    
+    
     ## Sorting by age group to the appropriate dataframe
     if surveyData['age_dropdown'] >= 65:
         corrRateOA[fileName] = corrRatePerTrial
@@ -195,6 +217,11 @@ for file in dirList:
     rtData.append(trainAve)
     testAve = np.nanmean(aveRTList[-5:])
     rtData.append(testAve)
+    ## Calculate miss rates for last 5 training and 5 test and append each to missRates
+    trainMiss = np.nanmean(missRatePerTrial[-10:-5])
+    missRates.append(trainMiss)
+    testMiss = np.nanmean(missRatePerTrial[-5:])
+    missRates.append(testMiss)
     ## Append phases to phase array
     phase.append('train')
     phase.append('test')
@@ -217,6 +244,36 @@ for file in dirList:
         rushProbOA[fileName] = rushProbs
     else:
         rushProbYA[fileName] = rushProbs
+        
+    # Probability of reward per trial (reward/ding condition: correct response & rt<500ms)
+    indivRTAcc = pd.DataFrame({'RT':rt, 'Acc':corr}) # create dataframe with necessary data
+    dingCount = [] # set empty array
+    for index, row in indivRTAcc.iterrows():
+        if indivRTAcc['RT'][index] < 500 and indivRTAcc['Acc'][index]==1:
+            dingCount.append(1) # Append 1 ding if it satisfies conditions for a ding
+        else:
+            dingCount.append(0)
+    dingPerTrial = divide_chunks(dingCount, 12) # divide by trial
+    dingRates = [np.nanmean(y) for y in dingPerTrial] # Get ding rate per trial
+    if surveyData['age_dropdown'] >= 65:
+        rewardRateOA[fileName] = dingRates
+    else:
+        rewardRateYA[fileName] = dingRates
+        
+    # Probability punished per trial (condition: RT>=1000ms OR incorrect response)
+    ## uses the same indivRTAcc dataframe as reward rate
+    punishCount = [] # set empty array
+    for index, row in indivRTAcc.iterrows():
+        if indivRTAcc['RT'][index] >= 1000 or indivRTAcc['Acc'][index]==0:
+            punishCount.append(1) # Append 1 punishment if it satisfies conditions for punishment
+        else:
+            punishCount.append(0)
+    punishPerTrial = divide_chunks(punishCount, 12) # divide by trial
+    punishRates = [np.nanmean(z) for z in punishPerTrial] # Get punishment rate per trial
+    if surveyData['age_dropdown'] >= 65:
+        punishRateOA[fileName] = punishRates
+    else:
+        punishRateYA[fileName] = punishRates
         
 #############
 # Plot data
@@ -294,8 +351,8 @@ missRateYA['SEM'] = missRateYA.iloc[:, :-1].sem(axis=1) # Create a column calcul
 plt.figure() # reset
 plt.plot(trials, corrRateYA['Mean'].values, color='g', label='correct')
 plt.errorbar(trials, corrRateYA['Mean'].values, yerr=corrRateYA['SEM'].values, fmt='.g', ecolor='g', elinewidth=0.5) # success rates
-plt.plot(trials, incRateOA['Mean'].values, color='r', label='incorrect')
-plt.errorbar(trials, incRateOA['Mean'].values, yerr=incRateOA['SEM'].values, fmt='.r', ecolor='r', elinewidth=0.5) # incorrect rates
+plt.plot(trials, incRateYA['Mean'].values, color='r', label='incorrect')
+plt.errorbar(trials, incRateYA['Mean'].values, yerr=incRateYA['SEM'].values, fmt='.r', ecolor='r', elinewidth=0.5) # incorrect rates
 plt.plot(trials, missRateYA['Mean'].values, color='b', label='miss')
 plt.errorbar(trials, missRateYA['Mean'].values, yerr=missRateYA['SEM'].values, fmt='.b', ecolor='b', elinewidth=0.5) # miss rates
 plt.xlabel('Trial Number')
@@ -322,8 +379,8 @@ pattUnOA['Mean'] = pattUnOA.mean(axis=1) # Create column taking the mean of each
 pattUnOA['SEM'] = pattUnOA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
 ### Plot data
 plt.figure() # reset
-plt.plot(trials, pattAwOA['Mean'].values, color='g', label='Aware')
-plt.errorbar(trials, pattAwOA['Mean'].values, yerr=pattAwOA['SEM'].values, fmt='.g', elinewidth=0.5) # aware of pattern
+plt.plot(trials, pattAwOA['Mean'].values, color='b', label='Aware')
+plt.errorbar(trials, pattAwOA['Mean'].values, yerr=pattAwOA['SEM'].values, fmt='.b', elinewidth=0.5) # aware of pattern
 plt.plot(trials, pattUnOA['Mean'].values, color='r', label='Unaware')
 plt.errorbar(trials, pattUnOA['Mean'].values, yerr=pattUnOA['SEM'].values, fmt='.r', elinewidth=0.5) # unaware/unsure of pattern
 plt.xlabel('Trial Number')
@@ -347,8 +404,8 @@ pattUnYA['Mean'] = pattUnYA.mean(axis=1) # Create column taking the mean of each
 pattUnYA['SEM'] = pattUnYA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
 ### Plot data
 plt.figure() # reset
-plt.plot(trials, pattAwYA['Mean'].values, color='g', label='Aware')
-plt.errorbar(trials, pattAwYA['Mean'].values, yerr=pattAwYA['SEM'].values, fmt='.g', elinewidth=0.5) # aware of pattern
+plt.plot(trials, pattAwYA['Mean'].values, color='b', label='Aware')
+plt.errorbar(trials, pattAwYA['Mean'].values, yerr=pattAwYA['SEM'].values, fmt='.b', elinewidth=0.5) # aware of pattern
 plt.plot(trials, pattUnYA['Mean'].values, color='r', label='Unaware')
 plt.errorbar(trials, pattUnYA['Mean'].values, yerr=pattUnYA['SEM'].values, fmt='.r', elinewidth=0.5) # unaware/unsure of pattern
 plt.xlabel('Trial Number')
@@ -397,6 +454,42 @@ plt.close()
 figLastYA.savefig(saveLoc + '/learningYA.png', bbox_inches='tight')
 
 
+# Difference in average miss rates of last 5 training blocks vs. 5 test blocks (trials vs test, all participants, separate age groups)
+## OA
+### From missRateOA, get average miss rates of necessary trials and store in a dataframe
+lastMissOA = pd.DataFrame({'Last 5 training blocks':missRateOA['Mean'][-10:-5].values, 'Test blocks':missRateOA['Mean'][-5:].values})
+lastMissOA = lastMissOA.apply(lambda x: pd.Series(x.dropna().values)) # removes NaN values and resets index
+### Plot
+plt.figure() # reset
+plt.boxplot(lastMissOA)
+plt.xticks([1,2], ['Average of last 5 training blocks', 'Average of test blocks'])
+plt.ylabel('Probability')
+plt.yticks([0, 0.1])
+plt.title('Comparing average miss rates of last 5 train blocks vs. test blocks in older adults')
+figMissOA = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figMissOA.savefig(saveLoc + '/missRatesOA.png', bbox_inches='tight')
+
+## YA
+### From missRateOA, get average miss rates of necessary trials and store in a dataframe
+lastMissYA = pd.DataFrame({'Last 5 training blocks':missRateYA['Mean'][-10:-5].values, 'Test blocks':missRateYA['Mean'][-5:].values})
+lastMissYA = lastMissYA.apply(lambda x: pd.Series(x.dropna().values)) # removes NaN values and resets index
+### Plot
+plt.figure() # reset
+plt.boxplot(lastMissYA)
+plt.xticks([1,2], ['Average of last 5 training blocks', 'Average of test blocks'])
+plt.ylabel('Probability')
+plt.yticks([0, 0.1])
+plt.title('Comparing average miss rates of last 5 train blocks vs. test blocks in younger adults')
+figMissYA = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figMissYA.savefig(saveLoc + '/missRatesYA.png', bbox_inches='tight')
+
+
 # Change in rate of rushed response (rt < 500ms) (per trial, all participants, separate age groups)
 ## OA
 ### Calculate means and SEM
@@ -404,7 +497,7 @@ rushProbOA['Mean'] = rushProbOA.mean(axis=1) # Create column taking the mean of 
 rushProbOA['SEM'] = rushProbOA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
 ### Plot
 plt.figure() # reset
-plt.plot(trials, rushProbOA['Mean'].values, color = 'red', linewidth = 2, label='mean')
+plt.plot(trials, rushProbOA['Mean'].values, color = 'red')
 plt.errorbar(trials, rushProbOA['Mean'].values, yerr = rushProbOA['SEM'].values, fmt='.r', elinewidth=0.5)
 plt.xlabel('Trial Number')
 plt.xticks(trials)
@@ -423,7 +516,7 @@ rushProbYA['Mean'] = rushProbYA.mean(axis=1) # Create column taking the mean of 
 rushProbYA['SEM'] = rushProbYA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
 ### Plot
 plt.figure() # reset
-plt.plot(trials, rushProbYA['Mean'].values, color = 'red', linewidth = 2, label='mean')
+plt.plot(trials, rushProbYA['Mean'].values, color = 'red')
 plt.errorbar(trials, rushProbYA['Mean'].values, yerr = rushProbYA['SEM'].values, fmt='.r', elinewidth=0.5)
 plt.xlabel('Trial Number')
 plt.xticks(trials)
@@ -436,13 +529,100 @@ plt.pause(2)
 plt.close()
 figRushYA.savefig(saveLoc + '/rushProbYA.png', bbox_inches='tight')
 
+
+# Change in reward rate (correct response & rt<500ms) (per trial, all participants, OA vs. YA)
+## Calculate means and SEMs
+rewardRateOA['Mean'] = rewardRateOA.mean(axis=1) # Create column taking the mean of each row (trial)
+rewardRateOA['SEM'] = rewardRateOA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+rewardRateYA['Mean'] = rewardRateYA.mean(axis=1) # Create column taking the mean of each row (trial)
+rewardRateYA['SEM'] = rewardRateYA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+### Plot
+plt.figure() # reset
+plt.plot(trials, rewardRateOA['Mean'].values, color = 'blue', label='older adults')
+plt.errorbar(trials, rewardRateOA['Mean'].values, yerr = rewardRateOA['SEM'].values, fmt='.b', elinewidth=0.5)
+plt.plot(trials, rewardRateYA['Mean'].values, color = 'red', label='younger adults')
+plt.errorbar(trials, rewardRateYA['Mean'].values, yerr = rewardRateYA['SEM'].values, fmt='.r', elinewidth=0.5)
+plt.xlabel('Trial Number')
+plt.xticks(trials)
+plt.ylabel('Probability')
+plt.yticks([0, 0.5, 1.0])
+plt.title('Comparing change in reward rate (correct response & RT<500ms) between older and younger adults')
+plt.legend()
+figReward = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figReward.savefig(saveLoc + '/rewardAll.png', bbox_inches='tight')
+
+
+# Change in punishment rate (incorrect response or rt>=1000ms) (per trial, all participants, separate age groups)
+## OA
+### Calculate means and SEM
+punishRateOA['Mean'] = punishRateOA.mean(axis=1) # Create column taking the mean of each row (trial)
+punishRateOA['SEM'] = punishRateOA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+punishRateYA['Mean'] = punishRateYA.mean(axis=1) # Create column taking the mean of each row (trial)
+punishRateYA['SEM'] = punishRateYA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+### Plot
+plt.figure() # reset
+plt.plot(trials, punishRateOA['Mean'].values, color = 'blue', label = 'older adults')
+plt.errorbar(trials, punishRateOA['Mean'].values, yerr = punishRateOA['SEM'].values, fmt='.b', elinewidth=0.5)
+plt.plot(trials, punishRateYA['Mean'].values, color = 'red', label='younger adults')
+plt.errorbar(trials, punishRateYA['Mean'].values, yerr = punishRateYA['SEM'].values, fmt='.r', elinewidth=0.5)
+plt.xlabel('Trial Number')
+plt.xticks(trials)
+plt.ylabel('Probability')
+plt.yticks([0, 0.5, 1.0])
+plt.title('Comparing change in punishment rate (incorrect response OR RT>=1000ms) between older and younger adults')
+plt.legend()
+figPunish = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figPunish.savefig(saveLoc + '/punishAll.png', bbox_inches='tight')
+
 #############
 # Save survey data
 surveyDF = surveyDF.transpose() # transpose for easier viewing
 surveyDF.to_csv(saveLoc + '/allSurveyData.csv', index=False)
+
+
+# For patternAware - how accurate are they in determining the pattern?
+## As of now, this doesn't get partially correct sequences (e.g. if reported = [7,2,9,3,8,9], it would still mark it as False)
+trainSeq = [7,2,9,1,8,3,1,7,3,8,2,9]*2 # set up training sequence array, multiplied by 2 to consider if participants remember between trials
+## Define function to determine accuracy (from ChatGPT)
+def isinSequence(response, sequence):
+    # response = reported sequence, sequence = trainSeq
+    # Iterate over sequence with a sliding window
+    for t in range(len(sequence)-len(response)+1):
+        if sequence[t:t+len(response)] == response:
+            return len(response)/len(sequence)*2
+    return False
+## Get an array of the sequence responses
+seqAware = [] # set empty array
+# for every participant data, if reported aware of sequence, append sequence report to seqAware (NOTE: some values will be 'nan' due to not reporting)
+for index, row in surveyDF.iterrows():
+    if surveyDF['survey_awareness'][index] == 'awarenessYes':
+        seqAware.append(surveyDF['survey_order'][index])
+    else:
+        continue
+seqAware = [str(u) for u in seqAware] # convert each item into a string
+seqAware = [str(int(float(v))) for v in seqAware if v != 'nan'] # omit 'nan' values and turn each answer from float->integer->string (from ChatGPT)
+# Determine pattern accuracies
+pattAcc = [] # set empty array
+# for every reported sequence, use isinSequence function to determine the accuracy of each, then append rate to pattAcc
+for w in seqAware:
+    response = [int(x) for x in list(w)] # convert reported sequence (currently a string) into an array of integers and assign array to response (from ChatGPT)
+    acc = isinSequence(response, trainSeq) # calculate accuracy
+    pattAcc.append(acc)
+
 
 # Statistical test - repeated measures ANOVA
 ## dv = rt, subjects = participants, within = phase, between = ageGroup
 ## Create dataframe
 statsDF = pd.DataFrame({'Participant':participants, 'RT':rtData, 'Phase':phase, 'Age Group':ageGroup})
 statsDF.to_csv(saveLoc+'/allStatsData.csv', index=False)
+
+## dv = miss rates, subjects = participants, within = phase, between = ageGroup
+## Create dataframe
+missStats = pd.DataFrame({'Participant':participants, 'Miss Rate':missRates, 'Phase':phase, 'Age Group':ageGroup})
+missStats.to_csv(saveLoc+'/missStatsData.csv', index=False)
