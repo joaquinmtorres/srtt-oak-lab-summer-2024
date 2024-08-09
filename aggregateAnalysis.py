@@ -102,6 +102,7 @@ for file in dirList:
         
         ## 5. Reaction Time (rt)
         rt = np.array(exData['response_time']) # create array using response_time data
+        rt[rt >= 1000] = np.nan # convert all rts >= 1000 to NaN (since those are the misses - late responses)
         
         ## 6. Phase (phases)
         ### Split trialNum into two arrays
@@ -218,7 +219,6 @@ except FileExistsError:
 
 # Plot aggregate data
 ## Plot and save aggregate average RTs
-aggDF[aggDF >= 1000] = np.nan # convert all rts >= 750 to nan (since those are the misses - late responses)
 aggDF['Mean'] = aggDF.mean(axis=1) # Create column taking the mean of each row (trial)
 aggDF['SEM'] = aggDF.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
 plt.plot(trials, aggDF['Mean'].values)

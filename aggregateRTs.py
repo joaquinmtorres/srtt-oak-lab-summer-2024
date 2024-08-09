@@ -4,16 +4,25 @@ Created on Tue Aug  6 09:51:54 2024
 
 @author: joaquinmtorres
 
-Taking all OA and YA SRTT data (RTs) and combining them into one figure.
+Taking all OA and YA SRTT data (RTs) and combining them into one figure, 
+as well as creating a dataframe of all participants' average RT data from the
+last five training blocks and test blocks for stats tests.
 Adapted from aggregateAnalysis.py
 """
+'''
+Notes:
+    - df.nanmean for everything that makes use of means
+    - np.nanstd(a)/math.sqrt(sum(np.isnan(a)==False)) for sem
+    - do not omit misses (leave a comment saying to consider omitting them in the future)
+    - consolidate everything into one
+'''
+
 
 # Import libraries
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import glob
-from statsmodels.stats.anova import AnovaRM 
 from os.path import dirname
 
 # Helper Functions
@@ -165,11 +174,16 @@ for file in dirList:
     participants.append(fileName)
     
     # Calculate average RT data for last 5 training and 5 test and append each to rtData
-    rtArr = exData['response_time'] # Get rt data into an array
-    rtArr[rtArr > 1000] = np.nan # convert rts greater than 1000ms (misses) to np.nan    
-    trainAve = rtArr[-10:-5].mean()
+    rtArr = np.array(exData['response_time'], dtype=float) # Get rt data into an array and store each as a float to handle np.nan
+    rtArr[rtArr >= 1000] = np.nan # convert all rts >= 1000 to NaN (since those are the misses - late responses)
+    rtArr = list(divide_chunks(rtArr, 12)) # divide into trials
+    aveRTPerTrial = []
+    for trial in rtArr:
+        aveRT = np.nanmean(trial)
+        aveRTPerTrial.append(aveRT)
+    trainAve = np.nansum(aveRTPerTrial[-10:-5])/len(aveRTPerTrial[-10:-5]) # Get sum ignoring np.nan
     rtData.append(trainAve)
-    testAve = rtArr[-5:].mean()
+    testAve = np.nansum(aveRTPerTrial[-5:])/len(aveRTPerTrial[-5:]) # Get sum ignoring np.nan
     rtData.append(testAve)
     
     # Append phases to phase array
@@ -187,6 +201,3 @@ for file in dirList:
 # Create dataframe with using the arrays created
 statsDF = pd.DataFrame({'Participant':participants, 'RT':rtData, 'Phase':phase, 'Age Group':ageGroup})
 statsDF.to_csv(saveLoc+'/allStatsData.csv', index=False)
-
-# Run stats test (repeated measures ANOVA)
-print(AnovaRM(data=statsDF, depvar='RT', subject='Participant', within=['Phase']).fit())
