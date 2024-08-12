@@ -36,13 +36,15 @@ def divide_chunks(l, n):
 
 #############
         
-# Define file paths
-fileLoc = '/Users/joaqu/OneDrive/Documents/Bates/Kim Lab/dataFiles/20240806 All/data/'
+# Define necessary info
+fileLoc = input('Enter location/path of data files: ')
 dirList = sorted(glob.glob(fileLoc + '/*'))
 saveLoc = dirname(dirname(fileLoc)) # Files are in a folder named 'data', and we want everything to be saved at the directory before this folder
+howMany = int(input('How many key presses per trial? (implicit:12, explicit:6): '))
 
 # Set up aggregate dataframes
 trials = np.arange(1, 36) # Trial numbers
+parID = [] # set empty array for surveyDF column
 surveyDF = pd.DataFrame() # Set empty df for aggregated survey Data
 ## Across all OA Data
 oaRTs = pd.DataFrame(index=trials) # for response times (same figure with yaRTs)
@@ -81,6 +83,7 @@ for file in dirList:
     # Set file names and save directories
     fileName = file.split('/')[-1:][0].split('\\')[1].split('.')[0]
     saveDir = os.path.join(saveLoc, fileName)
+    parID.append(fileName) # save participant id 
     
     # Skip file if analysis data for that file already exist
     if os.path.isdir(saveDir) == True:
@@ -100,7 +103,7 @@ for file in dirList:
     ## Then experimental data
     exData = df[['empty_column', 'response', 'correct', 'response_time', 
                        'accuracy', 'average_response_time', 'total_response_time']].iloc[:-1] # omits final unnecessary row
-    exData = exData[-420:].reset_index(drop=True).replace('None', np.nan) # omits practice trial rows, then resets index and replaces 'None' objects with nan
+    exData = exData[-howMany*35:].reset_index(drop=True).replace('None', np.nan) # omits practice trial rows, then resets index and replaces 'None' objects with nan
     ### NOTE: empty_column refers to the specific key that is displayed (stimulus)
     
     #############
@@ -111,8 +114,8 @@ for file in dirList:
     keyPress = np.arange(1, len(exData['empty_column'])+1)
     
     ## 2. Trial Number (trialNum)
-    ### Create array where each trial number (1-35) are multiplied by the number of items in one sequence (12)
-    trialNum = trials.repeat(12)
+    ### Create array where each trial number (1-35) are multiplied by the number of items in one sequence
+    trialNum = trials.repeat(howMany)
     
     ## 3. Key Transitions (transList)
     count = 0 # initialize count
@@ -152,7 +155,7 @@ for file in dirList:
     # Fill up empty dataframes
     
     # Average response times per trial to oaRTs/yaRTs dataframes, as well as corresponding patternAware/patternUnaware dataframes
-    rtPerTrial = list(divide_chunks(rt, 12)) # Divide rt data into trials (12 responses per trial)
+    rtPerTrial = list(divide_chunks(rt, howMany)) # Divide rt data into trials
     ### Sorting
     aveRTList = [np.nanmean(m) for m in rtPerTrial] # make array of average RTs of each trial
     if surveyData['age_dropdown'] >= 65:
@@ -169,20 +172,30 @@ for file in dirList:
             pattUnYA[fileName] = aveRTList
         
     # Correct, incorrect, and miss rates per trial
-    accuracyDF = pd.DataFrame({'Acc':corr, 'RT':rt}) # create df with necessary info
+    keyResp = [] # set empty array
+    # Build keyResp array with integers. If response is 'None', append an empty string
+    for kp in exData['response']:
+        try:
+            key = int(kp)
+            keyResp.append(key)
+        except ValueError:
+            keyResp.append('')
+    accuracyDF = pd.DataFrame({'Stimulus':exData['empty_column'], 'Response':keyResp, 'RT':rt}).replace(np.nan, '') # create df with necessary info, replacing missing responses (None or np.nan in) into empty string
     accuracies = [] # set empty array where values will be either corr (correct and w/in time limit), inc (incorrect and w/in time limit), or miss (exceeds time limit)
     ## Assign corr, inc, or miss to each index
     for index, row in accuracyDF.iterrows():
-        if accuracyDF['Acc'][index] == 1 and accuracyDF['RT'][index] < 1000:
+        if accuracyDF['Stimulus'][index] == accuracyDF['Response'][index]:
             accuracies.append('corr')
-        if accuracyDF['Acc'][index] == 0 and accuracyDF['RT'][index] < 1000:
-            accuracies.append('inc')
-        if accuracyDF['Acc'][index] == 0 and accuracyDF['RT'][index] >= 1000:
+        if accuracyDF['Response'][index] == '':
             accuracies.append('miss')
-    perTrial = list(divide_chunks(accuracies, 12)) # divide corrArr into trials (12 items per trial)
-    corrRatePerTrial = [n.count('corr')/12 for n in perTrial] # Create an array that gets correct rate for each trial in perTrial
-    incRatePerTrial = [o.count('inc')/12 for o in perTrial] # Create an array that gets incorrect rate for each trial in perTrial
-    missRatePerTrial = [p.count('miss')/12 for p in perTrial] # Create an array that gets miss rate for each trial in perTrial
+        if accuracyDF['Response'][index] != '' and accuracyDF['Response'][index] != accuracyDF['Stimulus'][index]:
+            accuracies.append('inc')
+    accuracyDF['Accuracy'] = accuracies # Add accuracy data as a column in dataframe
+    accuracyDF.to_csv(saveDir + '/accuracyData.csv', index=False) # Save data
+    perTrial = list(divide_chunks(accuracies, howMany)) # divide corrArr into trials
+    corrRatePerTrial = [n.count('corr')/howMany for n in perTrial] # Create an array that gets correct rate for each trial in perTrial
+    incRatePerTrial = [o.count('inc')/howMany for o in perTrial] # Create an array that gets incorrect rate for each trial in perTrial
+    missRatePerTrial = [p.count('miss')/howMany for p in perTrial] # Create an array that gets miss rate for each trial in perTrial
     ## Plot individual data
     plt.figure() # reset
     plt.plot(trials, corrRatePerTrial, color='g', label='correct')
@@ -195,6 +208,7 @@ for file in dirList:
     plt.title(f'Change in average correct/incorrect/miss rates of {fileName}')
     plt.legend()
     figHitIndiv = plt.gcf()
+    plt.close()
     figHitIndiv.savefig(saveDir + f'/hitRates {fileName}.png', bbox_inches='tight')
     
     
@@ -238,7 +252,7 @@ for file in dirList:
     for q in rtPerTrial:
         rushCount = sum(r < 500 for r in q) # for each trial, count number of RTs<500ms
         rushPerTrial.append(rushCount)
-    rushProbs = [s/12 for s in rushPerTrial] # Divide each count in rushPerTrial by 12 to get probability of rush per trial
+    rushProbs = [s/howMany for s in rushPerTrial] # Divide each count in rushPerTrial by 12 to get probability of rush per trial
     ## Sorting data
     if surveyData['age_dropdown'] >= 65:
         rushProbOA[fileName] = rushProbs
@@ -246,14 +260,14 @@ for file in dirList:
         rushProbYA[fileName] = rushProbs
         
     # Probability of reward per trial (reward/ding condition: correct response & rt<500ms)
-    indivRTAcc = pd.DataFrame({'RT':rt, 'Acc':corr}) # create dataframe with necessary data
+    ## using accuracyDF
     dingCount = [] # set empty array
-    for index, row in indivRTAcc.iterrows():
-        if indivRTAcc['RT'][index] < 500 and indivRTAcc['Acc'][index]==1:
+    for index, row in accuracyDF.iterrows():
+        if accuracyDF['Stimulus'][index] == accuracyDF['Response'][index] and accuracyDF['RT'][index] < 500:
             dingCount.append(1) # Append 1 ding if it satisfies conditions for a ding
         else:
             dingCount.append(0)
-    dingPerTrial = divide_chunks(dingCount, 12) # divide by trial
+    dingPerTrial = divide_chunks(dingCount, howMany) # divide by trial
     dingRates = [np.nanmean(y) for y in dingPerTrial] # Get ding rate per trial
     if surveyData['age_dropdown'] >= 65:
         rewardRateOA[fileName] = dingRates
@@ -261,14 +275,14 @@ for file in dirList:
         rewardRateYA[fileName] = dingRates
         
     # Probability punished per trial (condition: RT>=1000ms OR incorrect response)
-    ## uses the same indivRTAcc dataframe as reward rate
+    ## using accuracyDF
     punishCount = [] # set empty array
-    for index, row in indivRTAcc.iterrows():
-        if indivRTAcc['RT'][index] >= 1000 or indivRTAcc['Acc'][index]==0:
-            punishCount.append(1) # Append 1 punishment if it satisfies conditions for punishment
+    for index, row in accuracyDF.iterrows():
+        if accuracyDF['Stimulus'][index] == accuracyDF['Response'][index]:
+            punishCount.append(0) # if correct response within time limit, append 0
         else:
-            punishCount.append(0)
-    punishPerTrial = divide_chunks(punishCount, 12) # divide by trial
+            punishCount.append(1)
+    punishPerTrial = divide_chunks(punishCount, howMany) # divide by trial
     punishRates = [np.nanmean(z) for z in punishPerTrial] # Get punishment rate per trial
     if surveyData['age_dropdown'] >= 65:
         punishRateOA[fileName] = punishRates
@@ -464,7 +478,7 @@ plt.figure() # reset
 plt.boxplot(lastMissOA)
 plt.xticks([1,2], ['Average of last 5 training blocks', 'Average of test blocks'])
 plt.ylabel('Probability')
-plt.yticks([0, 0.1])
+plt.yticks([0, 0.25, 0.5])
 plt.title('Comparing average miss rates of last 5 train blocks vs. test blocks in older adults')
 figMissOA = plt.gcf()
 plt.show(block=False)
@@ -481,7 +495,7 @@ plt.figure() # reset
 plt.boxplot(lastMissYA)
 plt.xticks([1,2], ['Average of last 5 training blocks', 'Average of test blocks'])
 plt.ylabel('Probability')
-plt.yticks([0, 0.1])
+plt.yticks([0, 0.25, 0.5])
 plt.title('Comparing average miss rates of last 5 train blocks vs. test blocks in younger adults')
 figMissYA = plt.gcf()
 plt.show(block=False)
@@ -583,10 +597,11 @@ figPunish.savefig(saveLoc + '/punishAll.png', bbox_inches='tight')
 #############
 # Save survey data
 surveyDF = surveyDF.transpose() # transpose for easier viewing
+surveyDF['Participant ID'] = parID # add participant IDs
 surveyDF.to_csv(saveLoc + '/allSurveyData.csv', index=False)
 
 
-# For patternAware - how accurate are they in determining the pattern?
+'''# For patternAware - how accurate are they in determining the pattern?
 ## As of now, this doesn't get partially correct sequences (e.g. if reported = [7,2,9,3,8,9], it would still mark it as False)
 trainSeq = [7,2,9,1,8,3,1,7,3,8,2,9]*2 # set up training sequence array, multiplied by 2 to consider if participants remember between trials
 ## Define function to determine accuracy (from ChatGPT)
@@ -613,7 +628,7 @@ pattAcc = [] # set empty array
 for w in seqAware:
     response = [int(x) for x in list(w)] # convert reported sequence (currently a string) into an array of integers and assign array to response (from ChatGPT)
     acc = isinSequence(response, trainSeq) # calculate accuracy
-    pattAcc.append(acc)
+    pattAcc.append(acc)'''
 
 
 # Statistical test - repeated measures ANOVA
