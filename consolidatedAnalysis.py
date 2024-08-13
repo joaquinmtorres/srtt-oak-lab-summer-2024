@@ -34,6 +34,29 @@ def divide_chunks(l, n):
     for x in range(0, len(l), n):  
         yield l[x:x + n] 
 
+## To determine accuracy of reported sequence (from ChatGPT)
+def isinSequence(response, sequence):
+    # response = reported sequence, sequence = trainSeq
+    # Iterate over sequence with a sliding window
+    for t in range(len(sequence)-len(response)+1):
+        if sequence[t:t+len(response)] == response:
+            return len(response)/len(sequence)*2
+    return False
+
+# Generating boxplot figure with two datasets
+## from: https://www.geeksforgeeks.org/how-to-create-boxplots-by-group-in-matplotlib/
+# each plot returns a dictionary, use plt.setp()
+# function to assign the color code
+# for all properties of the box plot of particular group
+# use the below function to set color for particular group,
+# by iterating over all properties of the box plot
+def define_box_properties(plot_name, color_code, label):
+    for kk, vv in plot_name.items():
+        plt.setp(plot_name.get(kk), color=color_code)
+    # use plot function to draw a small line to name the legend.
+    plt.plot([], c=color_code, label=label)
+    plt.legend()
+
 #############
         
 # Define necessary info
@@ -67,7 +90,23 @@ rushProbYA = pd.DataFrame(index=trials) # probability of rushed response (rt < 5
 rewardRateYA = pd.DataFrame(index=trials) # probability of reward (ding) per trial
 punishRateYA = pd.DataFrame(index=trials) # probability punished per trial
 
-# Set empty arrays for stats test
+# Set empty arrays/dataframes for additional patternAware data analyses
+## OA
+improveOA = [] # improvement rates (average of T1-3 - average of T28-30)
+regressOA = [] # regression (difference of T31-T30/difference of T1-T30)
+trainSlopesOA = [] # learning rate (average difference of slopes of T1-5)
+testSlopesOA = [] # learning rate (average difference of slopes of T31-35)
+stabilizeOA = pd.DataFrame(index=np.arange(1,35)) # when learning stabilizes (i.e. when there is little to no difference in improvement in terms of correct rate); index=each transition
+variabilityOA = pd.DataFrame(index=trials) # change in RT variability within each trial
+## YA
+improveYA = [] # improvement rates (average of T1-3 - average of T28-30)
+regressYA = [] # regression (difference of T31-T30/difference of T1-T30)
+trainSlopesYA = [] # learning rate (average difference of slopes of T1-5)
+testSlopesYA = [] # learning rate (average difference of slopes of T31-35)
+stabilizeYA = pd.DataFrame(index=np.arange(1,35)) # when learning stabilizes (i.e. when there is little to no difference in improvement in terms of correct rate); index=each transition
+variabilityYA = pd.DataFrame(index=trials) # change in RT variability within each trial
+
+# Set empty arrays for stats tests
 participants = []
 rtData = []
 missRates = []
@@ -210,8 +249,6 @@ for file in dirList:
     figHitIndiv = plt.gcf()
     plt.close()
     figHitIndiv.savefig(saveDir + f'/hitRates {fileName}.png', bbox_inches='tight')
-    
-    
     ## Sorting by age group to the appropriate dataframe
     if surveyData['age_dropdown'] >= 65:
         corrRateOA[fileName] = corrRatePerTrial
@@ -289,6 +326,55 @@ for file in dirList:
     else:
         punishRateYA[fileName] = punishRates
         
+    #############
+    # patternAware data analyses
+    if surveyData['survey_awareness'] == 'awarenessYes':
+        
+        ## Improvement Rate (average of T1-3 - average of T28-30)
+        firstThree = np.nanmean(aveRTList[0:3]) # Take average of Trials 1-3 - initial training blocks
+        lastThree = np.nanmean(aveRTList[27:30]) # Take average of Trials 28-30 - final training blocks
+        impRate = firstThree - lastThree # Take difference to get improvement rate per participant
+        ### Store into arrays
+        if surveyData['age_dropdown'] >= 65:
+            improveOA.append(impRate)
+        else:
+            improveYA.append(impRate)
+            
+        ## Regression @ start of test (amount of sequence-specific learning)
+        numRegress = aveRTList[30] - aveRTList[29] # Get numerator, or Trial 31-Trial 30
+        denRegress = aveRTList[0] - aveRTList[29] # Get denominator, or Trial 1-Trial 30
+        ratioReg = numRegress/denRegress # Get ratio
+        ### Store into arrays
+        if surveyData['age_dropdown'] >= 65:
+            regressOA.append(ratioReg)
+        else:
+            regressYA.append(ratioReg)
+            
+        ## Learning rate (ave. slopes of first 5 train blocks vs. ave. slopes of test blocks)
+        aveTrainSlopes = np.nanmean(np.diff(aveRTList[:5])) # Get average slope of first 5 training blocks
+        aveTestSlopes = np.nanmean(np.diff(aveRTList[-5:])) # Get average slope of test blocks
+        ### Store into arrays
+        if surveyData['age_dropdown'] >= 65:
+            trainSlopesOA.append(aveTrainSlopes)
+            testSlopesOA.append(aveTestSlopes)
+        else:
+            trainSlopesYA.append(aveTrainSlopes)
+            testSlopesYA.append(aveTestSlopes)
+            
+        # When learning stabilizes (i.e. when correct rate doesn't improve more)
+        improvements = np.diff(corrRatePerTrial) # get improvement per trial
+        if surveyData['age_dropdown'] >= 65:
+            stabilizeOA[fileName] = improvements
+        else:
+            stabilizeYA[fileName] = improvements
+            
+        # Change in RT variability within each trial
+        sdPerTrial = [np.std(seq) for seq in rtPerTrial] # create array of standard deviation of each trial
+        if surveyData['age_dropdown'] >= 65:
+            variabilityOA[fileName] = sdPerTrial
+        else:
+            variabilityYA[fileName] = sdPerTrial
+       
 #############
 # Plot data
 
@@ -435,73 +521,59 @@ figAwareYA.savefig(saveLoc + '/awarenessYA.png', bbox_inches='tight')
 
 
 # Difference in average response time of last 5 training blocks vs. 5 test blocks (trials vs test, all participants, separate age groups)
-## OA
-### From oaRTs, get average RTs of necessary trials and store in a dataframe
-lastOA = pd.DataFrame({'Last 5 training blocks':oaRTs['Mean'][-10:-5].values, 'Test blocks':oaRTs['Mean'][-5:].values})
-lastOA = lastOA.apply(lambda x: pd.Series(x.dropna().values)) # removes NaN values and resets index
-### Plot
-plt.figure() # reset
-plt.boxplot(lastOA)
-plt.xticks([1,2], ['Average of last 5 training blocks', 'Average of test blocks'])
+## From RTs dataframes, concatenate data
+oaLearning = [oaRTs['Mean'][-10:-5].values, oaRTs['Mean'][-5:].values]
+yaLearning = [yaRTs['Mean'][-10:-5].values, yaRTs['Mean'][-5:].values]
+## Plot data
+### from: https://www.geeksforgeeks.org/how-to-create-boxplots-by-group-in-matplotlib/
+learnTicks = ['last 5 training blocks', 'test blocks'] # define xticks
+### Create separate boxplots for arrays
+oaLearnPlot = plt.boxplot(oaLearning, positions=np.array(np.arange(len(oaLearning)))*2.0-0.35, widths=0.6)
+yaLearnPlot = plt.boxplot(yaLearning, positions=np.array(np.arange(len(yaLearning)))*2.0+0.35, widths=0.6)
+# setting colors for each groups
+define_box_properties(oaLearnPlot, '#2C7BB6', 'older adults')
+define_box_properties(yaLearnPlot, '#D7191C', 'younger adults')
+# set the x label values
+plt.xticks(np.arange(0, len(learnTicks) * 2, 2), learnTicks)
+# set the limit for x axis
+plt.xlim(-2, len(learnTicks)*2)
+# Set axes labels and title
+plt.xlabel('Phase')
 plt.ylabel('Response time (ms)')
-plt.title('Comparing average RT of last 5 train blocks vs. test blocks in older adults')
-figLastOA = plt.gcf()
+plt.title('Average RT of last 5 train blocks vs. test blocks')
+figLast = plt.gcf()
 plt.show(block=False)
 plt.pause(2)
 plt.close()
-figLastOA.savefig(saveLoc + '/learningOA.png', bbox_inches='tight')
-
-## YA
-### From yaRTs, get average RTs of necessary trials and store in a dataframe
-lastYA = pd.DataFrame({'Last 5 training blocks':yaRTs['Mean'][-10:-5].values, 'Test blocks':yaRTs['Mean'][-5:].values})
-lastYA = lastYA.apply(lambda x: pd.Series(x.dropna().values)) # removes NaN values and resets index
-### Plot
-plt.figure() # reset
-plt.boxplot(lastYA)
-plt.xticks([1,2], ['Average of last 5 training blocks', 'Average of test blocks'])
-plt.ylabel('Response time (ms)')
-plt.title('Comparing average RT of last 5 train blocks vs. test blocks in younger adults')
-figLastYA = plt.gcf()
-plt.show(block=False)
-plt.pause(2)
-plt.close()
-figLastYA.savefig(saveLoc + '/learningYA.png', bbox_inches='tight')
+figLast.savefig(saveLoc + '/learningAll.png', bbox_inches='tight')
 
 
 # Difference in average miss rates of last 5 training blocks vs. 5 test blocks (trials vs test, all participants, separate age groups)
-## OA
-### From missRateOA, get average miss rates of necessary trials and store in a dataframe
-lastMissOA = pd.DataFrame({'Last 5 training blocks':missRateOA['Mean'][-10:-5].values, 'Test blocks':missRateOA['Mean'][-5:].values})
-lastMissOA = lastMissOA.apply(lambda x: pd.Series(x.dropna().values)) # removes NaN values and resets index
-### Plot
-plt.figure() # reset
-plt.boxplot(lastMissOA)
-plt.xticks([1,2], ['Average of last 5 training blocks', 'Average of test blocks'])
+## From missRate dataframes, concatenate data
+oaMiss = [missRateOA['Mean'][-10:-5].values, missRateOA['Mean'][-5:].values]
+yaMiss = [missRateYA['Mean'][-10:-5].values, missRateYA['Mean'][-5:].values]
+## Plot data
+### from: https://www.geeksforgeeks.org/how-to-create-boxplots-by-group-in-matplotlib/
+missTicks = ['last 5 training blocks', 'test blocks'] # define xticks
+### Create separate boxplots for arrays
+oaMissPlot = plt.boxplot(oaMiss, positions=np.array(np.arange(len(oaMiss)))*2.0-0.35, widths=0.6)
+yaMissPlot = plt.boxplot(yaMiss, positions=np.array(np.arange(len(yaMiss)))*2.0+0.35, widths=0.6)
+# setting colors for each groups
+define_box_properties(oaMissPlot, '#2C7BB6', 'older adults')
+define_box_properties(yaMissPlot, '#D7191C', 'younger adults')
+# set the x label values
+plt.xticks(np.arange(0, len(missTicks) * 2, 2), missTicks)
+# set the limit for x axis
+plt.xlim(-2, len(missTicks)*2)
+# Set axes labels and title
+plt.xlabel('Phase')
 plt.ylabel('Probability')
-plt.yticks([0, 0.25, 0.5])
-plt.title('Comparing average miss rates of last 5 train blocks vs. test blocks in older adults')
-figMissOA = plt.gcf()
+plt.title('Average RT of last 5 train blocks vs. test blocks')
+figMiss = plt.gcf()
 plt.show(block=False)
 plt.pause(2)
 plt.close()
-figMissOA.savefig(saveLoc + '/missRatesOA.png', bbox_inches='tight')
-
-## YA
-### From missRateOA, get average miss rates of necessary trials and store in a dataframe
-lastMissYA = pd.DataFrame({'Last 5 training blocks':missRateYA['Mean'][-10:-5].values, 'Test blocks':missRateYA['Mean'][-5:].values})
-lastMissYA = lastMissYA.apply(lambda x: pd.Series(x.dropna().values)) # removes NaN values and resets index
-### Plot
-plt.figure() # reset
-plt.boxplot(lastMissYA)
-plt.xticks([1,2], ['Average of last 5 training blocks', 'Average of test blocks'])
-plt.ylabel('Probability')
-plt.yticks([0, 0.25, 0.5])
-plt.title('Comparing average miss rates of last 5 train blocks vs. test blocks in younger adults')
-figMissYA = plt.gcf()
-plt.show(block=False)
-plt.pause(2)
-plt.close()
-figMissYA.savefig(saveLoc + '/missRatesYA.png', bbox_inches='tight')
+figMiss.savefig(saveLoc + '/missRatesAll.png', bbox_inches='tight')
 
 
 # Change in rate of rushed response (rt < 500ms) (per trial, all participants, separate age groups)
@@ -570,13 +642,12 @@ figReward.savefig(saveLoc + '/rewardAll.png', bbox_inches='tight')
 
 
 # Change in punishment rate (incorrect response or rt>=1000ms) (per trial, all participants, separate age groups)
-## OA
-### Calculate means and SEM
+## Calculate means and SEM
 punishRateOA['Mean'] = punishRateOA.mean(axis=1) # Create column taking the mean of each row (trial)
 punishRateOA['SEM'] = punishRateOA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
 punishRateYA['Mean'] = punishRateYA.mean(axis=1) # Create column taking the mean of each row (trial)
 punishRateYA['SEM'] = punishRateYA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
-### Plot
+## Plot
 plt.figure() # reset
 plt.plot(trials, punishRateOA['Mean'].values, color = 'blue', label = 'older adults')
 plt.errorbar(trials, punishRateOA['Mean'].values, yerr = punishRateOA['SEM'].values, fmt='.b', elinewidth=0.5)
@@ -595,41 +666,121 @@ plt.close()
 figPunish.savefig(saveLoc + '/punishAll.png', bbox_inches='tight')
 
 #############
+# patternAware Data Analyses
+
+# Improvement Rate (difference of average of T1-3 and average of T28-30) (select trials, all participants, OA vs. YA boxplot)
+## Concatenate arrays
+improveAll = [improveOA, improveYA]
+## Plot
+plt.figure() # reset
+plt.boxplot(improveAll)
+plt.xticks([1,2], ['OA', 'YA'])
+plt.ylabel('Response time (ms)')
+plt.title('Improvement over training of older vs. younger adults')
+figImpRate = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figImpRate.savefig(saveLoc + '/improvementAll.png', bbox_inches='tight')
+
+
+# Amount of Regression (amount of sequence-specific learning) (select trials, all participants, OA vs. YA boxplot)
+## Concatenate arrays
+regressAll = [regressOA, regressYA]
+## Plot
+plt.figure() # reset
+plt.boxplot(regressAll)
+plt.xticks([1,2], ['OA', 'YA'])
+plt.ylabel('Response time (ms)')
+plt.title('Amount of regression of older vs. younger adults')
+figRegress = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figRegress.savefig(saveLoc + '/regressionAll.png', bbox_inches='tight')
+
+
+# Learning rates (slopes of first five train blocks vs. slopes of test blocks) (select trials, all participants, OA vs. YA boxplots)
+## Concatenate data
+oaSlopes = [trainSlopesOA, testSlopesOA]
+yaSlopes = [trainSlopesYA, testSlopesYA]
+## Plot data
+### from: https://www.geeksforgeeks.org/how-to-create-boxplots-by-group-in-matplotlib/
+lrTicks = ['initial training', 'test'] # define xticks
+### Create separate boxplots for arrays
+oaPlot = plt.boxplot(oaSlopes, positions=np.array(np.arange(len(oaSlopes)))*2.0-0.35, widths=0.6)
+yaPlot = plt.boxplot(yaSlopes, positions=np.array(np.arange(len(yaSlopes)))*2.0+0.35, widths=0.6)
+# setting colors for each groups
+define_box_properties(oaPlot, '#2C7BB6', 'older adults')
+define_box_properties(yaPlot, '#D7191C', 'younger adults')
+# set the x label values
+plt.xticks(np.arange(0, len(lrTicks) * 2, 2), lrTicks)
+# set the limit for x axis
+plt.xlim(-2, len(lrTicks)*2)
+# Set axes labels and title
+plt.xlabel('Phase')
+plt.ylabel('Learning rate (difference in response times)')
+plt.title('Learning rates of older and younger adults')
+figLearnRate = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figLearnRate.savefig(saveLoc + '/learnRateAll.png', bbox_inches='tight')
+
+
+# When learning stabilizes (i.e. when correct rate doesn't improve more) (all trials, all participants, OA vs. YA)
+## Get means and SEM
+stabilizeOA['Mean'] = stabilizeOA.mean(axis=1) # Create column taking the mean of each row (trial)
+stabilizeOA['SEM'] = stabilizeOA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+stabilizeYA['Mean'] = stabilizeYA.mean(axis=1) # Create column taking the mean of each row (trial)
+stabilizeYA['SEM'] = stabilizeYA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+## Plot data
+plt.figure() # reset
+plt.plot(np.arange(1,35), stabilizeOA['Mean'].values, color = 'blue', label = 'older adults')
+plt.errorbar(np.arange(1,35), stabilizeOA['Mean'].values, yerr = stabilizeOA['SEM'].values, fmt='.b', elinewidth=0.5)
+plt.plot(np.arange(1,35), stabilizeYA['Mean'].values, color = 'red', label='younger adults')
+plt.errorbar(np.arange(1,35), stabilizeYA['Mean'].values, yerr = stabilizeYA['SEM'].values, fmt='.r', elinewidth=0.5)
+plt.xlabel('Transition')
+plt.xticks(trials)
+plt.ylabel('Improvement')
+plt.yticks([0, 0.5, 1.0])
+plt.title('When learning stabilizes (i.e. improvement asymptotes) in older vs. younger adults')
+plt.legend()
+figStab = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figStab.savefig(saveLoc + '/stabilizeAll.png', bbox_inches='tight')
+
+
+# Change in RT variability (standard deviation) within each trial (all trials, all participants, OA vs. YA)
+## Get means and SEM
+variabilityOA['Mean'] = variabilityOA.mean(axis=1) # Create column taking the mean of each row (trial)
+variabilityOA['SEM'] = variabilityOA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+variabilityYA['Mean'] = variabilityYA.mean(axis=1) # Create column taking the mean of each row (trial)
+variabilityYA['SEM'] = variabilityYA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+## Plot
+plt.figure() # reset
+plt.plot(trials, variabilityOA['Mean'].values, color = 'blue', label = 'older adults')
+plt.errorbar(trials, variabilityOA['Mean'].values, yerr = variabilityOA['SEM'].values, fmt='.b', elinewidth=0.5)
+plt.plot(trials, variabilityYA['Mean'].values, color = 'red', label='younger adults')
+plt.errorbar(trials, variabilityYA['Mean'].values, yerr = variabilityYA['SEM'].values, fmt='.r', elinewidth=0.5)
+plt.xlabel('Trial Number')
+plt.xticks(trials)
+plt.ylabel('Average standard deviation')
+plt.title('Variability of response times per trial of older vs. younger adults')
+plt.legend()
+figVar = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figVar.savefig(saveLoc + '/variabilityAll.png', bbox_inches='tight')
+
+#############
 # Save survey data
 surveyDF = surveyDF.transpose() # transpose for easier viewing
 surveyDF['Participant ID'] = parID # add participant IDs
 surveyDF.to_csv(saveLoc + '/allSurveyData.csv', index=False)
-
-
-'''# For patternAware - how accurate are they in determining the pattern?
-## As of now, this doesn't get partially correct sequences (e.g. if reported = [7,2,9,3,8,9], it would still mark it as False)
-trainSeq = [7,2,9,1,8,3,1,7,3,8,2,9]*2 # set up training sequence array, multiplied by 2 to consider if participants remember between trials
-## Define function to determine accuracy (from ChatGPT)
-def isinSequence(response, sequence):
-    # response = reported sequence, sequence = trainSeq
-    # Iterate over sequence with a sliding window
-    for t in range(len(sequence)-len(response)+1):
-        if sequence[t:t+len(response)] == response:
-            return len(response)/len(sequence)*2
-    return False
-## Get an array of the sequence responses
-seqAware = [] # set empty array
-# for every participant data, if reported aware of sequence, append sequence report to seqAware (NOTE: some values will be 'nan' due to not reporting)
-for index, row in surveyDF.iterrows():
-    if surveyDF['survey_awareness'][index] == 'awarenessYes':
-        seqAware.append(surveyDF['survey_order'][index])
-    else:
-        continue
-seqAware = [str(u) for u in seqAware] # convert each item into a string
-seqAware = [str(int(float(v))) for v in seqAware if v != 'nan'] # omit 'nan' values and turn each answer from float->integer->string (from ChatGPT)
-# Determine pattern accuracies
-pattAcc = [] # set empty array
-# for every reported sequence, use isinSequence function to determine the accuracy of each, then append rate to pattAcc
-for w in seqAware:
-    response = [int(x) for x in list(w)] # convert reported sequence (currently a string) into an array of integers and assign array to response (from ChatGPT)
-    acc = isinSequence(response, trainSeq) # calculate accuracy
-    pattAcc.append(acc)'''
-
 
 # Statistical test - repeated measures ANOVA
 ## dv = rt, subjects = participants, within = phase, between = ageGroup
