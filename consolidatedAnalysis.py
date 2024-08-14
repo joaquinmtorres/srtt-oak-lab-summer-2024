@@ -106,12 +106,29 @@ testSlopesYA = [] # learning rate (average difference of slopes of T31-35)
 stabilizeYA = pd.DataFrame(index=np.arange(1,35)) # when learning stabilizes (i.e. when there is little to no difference in improvement in terms of correct rate); index=each transition
 variabilityYA = pd.DataFrame(index=trials) # change in RT variability within each trial
 
-# Set empty arrays for stats tests
-participants = []
-rtData = []
-missRates = []
-phase = []
-ageGroup = []
+# Set empty arrays for stats test dataframes
+## General stats test
+parIDs = [] # participant ID (each participant will have 35 rows corresponding to each trial)
+ageArr = [] # age
+genderArr = [] # gender
+awareArr = [] # sequence awareness
+rtData = [] # rt
+corrRates = [] # correct rate
+incRates = [] # incorrect rate
+missRates = [] # miss rate
+rewRates = [] # reward rate
+punRates = [] # punishment rate
+resVars = [] # response variability
+triNum = [] # trial number
+rtDataNan = [] # rt data with inc/miss responses converted to NaN
+resVarsNan = [] # response variability with inc/miss responses converted to NaN
+## Learning rate stats test
+parIDsLR = [] # participant ID (each will have 2 rows representing each phase - initial and test)
+lr = [] # learning rate
+ageLR = [] # age
+genderLR = [] # gender
+awareLR = [] # sequence awareness
+phaseLR = [] # phase (either initial or test)
 
 #############
 
@@ -258,31 +275,6 @@ for file in dirList:
         corrRateYA[fileName] = corrRatePerTrial
         incRateYA[fileName] = incRatePerTrial
         missRateYA[fileName] = missRatePerTrial
-        
-    # Last 5 training blocks vs. test blocks + stats test
-    ## Append participants array with fileName twice
-    participants.append(fileName)
-    participants.append(fileName)
-    ## Calculate average RT data for last 5 training and 5 test and append each to rtData
-    trainAve = np.nanmean(aveRTList[-10:-5])
-    rtData.append(trainAve)
-    testAve = np.nanmean(aveRTList[-5:])
-    rtData.append(testAve)
-    ## Calculate miss rates for last 5 training and 5 test and append each to missRates
-    trainMiss = np.nanmean(missRatePerTrial[-10:-5])
-    missRates.append(trainMiss)
-    testMiss = np.nanmean(missRatePerTrial[-5:])
-    missRates.append(testMiss)
-    ## Append phases to phase array
-    phase.append('train')
-    phase.append('test')
-    ## Determine age group and append to ageGroup twice
-    if surveyData['age_dropdown'] >= 65:
-        age = 'OA'
-    else:
-        age = 'YA'
-    ageGroup.append(age)
-    ageGroup.append(age)
     
     # Probabilities of rushed response per trial
     rushPerTrial = [] # Array where counts of rushed responses per trial will go
@@ -295,7 +287,7 @@ for file in dirList:
         rushProbOA[fileName] = rushProbs
     else:
         rushProbYA[fileName] = rushProbs
-        
+    
     # Probability of reward per trial (reward/ding condition: correct response & rt<500ms)
     ## using accuracyDF
     dingCount = [] # set empty array
@@ -374,6 +366,82 @@ for file in dirList:
             variabilityOA[fileName] = sdPerTrial
         else:
             variabilityYA[fileName] = sdPerTrial
+            
+    ############
+    # Build up stats test dataframes
+    
+    # General
+    ## Participant ID - append fileName 35x
+    for aa in np.arange(0,35):
+        parIDs.append(fileName)
+    ## Age - append 35x
+    for bb in np.arange(0,35):
+        ageArr.append(surveyData['age_dropdown'])
+    ## Gender - append 35x
+    for cc in np.arange(0,35):
+        genderArr.append(surveyData['gender'])
+    ## Sequence Awareness - append 35x
+    for dd in np.arange(0,35):
+        awareArr.append(surveyData['survey_awareness'])
+    ## RT - append list of average RT per trial
+    rtData = rtData + aveRTList
+    ## Correct rates - append list of average correct rate per trial
+    corrRates = corrRates + corrRatePerTrial
+    ## Incorrect rates - append list of average incorrect rate per trial
+    incRates = incRates + incRatePerTrial
+    ## Miss rates - append list of average miss rate per trial
+    missRates = missRates + missRatePerTrial
+    ## Reward rates - append list of average reward rate per trial
+    rewRates = rewRates + dingRates
+    ## Punishment rates - append list of average punishment rate per trial
+    punRates = punRates + punishRates
+    ## Response variability - append list of RT variability per trial
+    sdPerTrialAll = [np.std(ff) for ff in rtPerTrial] # create array of standard deviation of each trial
+    resVars = resVars + sdPerTrialAll
+    ## Trial number - append list of trials (1-35)
+    triNum = triNum + trials.tolist() 
+    
+    # General RT and Response variability, but converting inc/miss RTs to NaN
+    ## from accuracyDF dataframe
+    nanAccuracyDF = accuracyDF # duplicate
+    nanAccuracyDF.loc[nanAccuracyDF['Accuracy'] != 'corr', 'RT'] = np.nan # convert inc/miss RTs to np.nan (from ChatGPT)
+    rtListNan = nanAccuracyDF['RT'].tolist() # turn RT column to list
+    rtPerTrialNan = list(divide_chunks(rtListNan, howMany)) # Divide into trials
+    aveRTListNan = [] # set empty array
+    sdPerTrialNan = [] # set empty array
+    # loop through each trial and get the mean. If all items in the trial are np.nan, set the mean and sd to np.nan (from ChatGPT)
+    for ee in rtPerTrialNan:
+        if np.all(np.isnan(ee)):
+            aveRTListNan.append(np.nan)
+            sdPerTrialNan.append(np.nan)
+        else:
+            aveRTListNan.append(np.nanmean(ee))
+            sdPerTrialNan.append(np.nanstd(ee))
+    ## Store into appropriate empty arrays
+    rtDataNan = rtDataNan + aveRTListNan
+    resVarsNan = resVarsNan + sdPerTrialNan
+    
+    # LR Stats
+    ## Participant ID - append fileName 2x
+    parIDsLR.append(fileName)
+    parIDsLR.append(fileName)
+    ## Learning rate (ave. slopes of first 5 train blocks vs. ave. slopes of test blocks)
+    aveTrainSlopesLR = np.nanmean(np.diff(aveRTList[:5])) # Get average slope of first 5 training blocks
+    aveTestSlopesLR = np.nanmean(np.diff(aveRTList[-5:])) # Get average slope of test blocks
+    lr.append(aveTrainSlopesLR)
+    lr.append(aveTestSlopesLR)
+    ## Age - append 2x
+    ageLR.append(surveyData['age_dropdown'])
+    ageLR.append(surveyData['age_dropdown'])
+    ## Gender - append 2x
+    genderLR.append(surveyData['gender'])
+    genderLR.append(surveyData['gender'])
+    ## Sequence awareness - append 2x
+    awareLR.append(surveyData['survey_awareness'])
+    awareLR.append(surveyData['survey_awareness'])
+    ## Phase - append initial and test
+    phaseLR.append('initial')
+    phaseLR.append('test')
        
 #############
 # Plot data
@@ -576,44 +644,29 @@ plt.close()
 figMiss.savefig(saveLoc + '/missRatesAll.png', bbox_inches='tight')
 
 
-# Change in rate of rushed response (rt < 500ms) (per trial, all participants, separate age groups)
-## OA
-### Calculate means and SEM
+# Change in rate of rushed response (rt < 500ms) (per trial, all participants, OA vs. YA)
+## Calculate means and SEM
 rushProbOA['Mean'] = rushProbOA.mean(axis=1) # Create column taking the mean of each row (trial)
 rushProbOA['SEM'] = rushProbOA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
-### Plot
-plt.figure() # reset
-plt.plot(trials, rushProbOA['Mean'].values, color = 'red')
-plt.errorbar(trials, rushProbOA['Mean'].values, yerr = rushProbOA['SEM'].values, fmt='.r', elinewidth=0.5)
-plt.xlabel('Trial Number')
-plt.xticks(trials)
-plt.ylabel('Probability')
-plt.yticks([0, 0.5, 1.0])
-plt.title('Change in rate of rushed response (RT<500ms) in older adults')
-figRushOA = plt.gcf()
-plt.show(block=False)
-plt.pause(2)
-plt.close()
-figRushOA.savefig(saveLoc + '/rushProbOA.png', bbox_inches='tight')
-
-## YA
-### Calculate means and SEM
 rushProbYA['Mean'] = rushProbYA.mean(axis=1) # Create column taking the mean of each row (trial)
 rushProbYA['SEM'] = rushProbYA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
-### Plot
+## Plot
 plt.figure() # reset
-plt.plot(trials, rushProbYA['Mean'].values, color = 'red')
+plt.plot(trials, rushProbOA['Mean'].values, color = 'blue', label='older adults')
+plt.errorbar(trials, rushProbOA['Mean'].values, yerr = rushProbOA['SEM'].values, fmt='.b', elinewidth=0.5)
+plt.plot(trials, rushProbYA['Mean'].values, color = 'red', label='younger adults')
 plt.errorbar(trials, rushProbYA['Mean'].values, yerr = rushProbYA['SEM'].values, fmt='.r', elinewidth=0.5)
 plt.xlabel('Trial Number')
 plt.xticks(trials)
 plt.ylabel('Probability')
 plt.yticks([0, 0.5, 1.0])
-plt.title('Change in rate of rushed response (RT<500ms) in younger adults')
-figRushYA = plt.gcf()
+plt.title('Change in rate of rushed response (RT<500ms) in older vs. younger adults')
+plt.legend()
+figRush = plt.gcf()
 plt.show(block=False)
 plt.pause(2)
 plt.close()
-figRushYA.savefig(saveLoc + '/rushProbYA.png', bbox_inches='tight')
+figRush.savefig(saveLoc + '/rushProbAll.png', bbox_inches='tight')
 
 
 # Change in reward rate (correct response & rt<500ms) (per trial, all participants, OA vs. YA)
@@ -782,13 +835,16 @@ surveyDF = surveyDF.transpose() # transpose for easier viewing
 surveyDF['Participant ID'] = parID # add participant IDs
 surveyDF.to_csv(saveLoc + '/allSurveyData.csv', index=False)
 
-# Statistical test - repeated measures ANOVA
-## dv = rt, subjects = participants, within = phase, between = ageGroup
-## Create dataframe
-statsDF = pd.DataFrame({'Participant':participants, 'RT':rtData, 'Phase':phase, 'Age Group':ageGroup})
-statsDF.to_csv(saveLoc+'/allStatsData.csv', index=False)
+# Create dataframes for statistical tests
+## General
+generalStats = pd.DataFrame({'Participant ID':parIDs, 'Age':ageArr, 'Gender':genderArr, 'Awareness':awareArr, 'RT':rtData, 'RT w/ NaN':rtDataNan, 'Correct Rate':corrRates, 'Incorrect Rate':incRates, 'Miss Rate':missRates, 'Reward Rate':rewRates, 'Punishment Rate':punRates, 'RT Variability':resVars, 'RT Var. w/ NaN':resVarsNan, 'Trial #':triNum})
+generalStats.to_csv(saveLoc + '/generalStatsData.csv', index=False)
 
-## dv = miss rates, subjects = participants, within = phase, between = ageGroup
-## Create dataframe
-missStats = pd.DataFrame({'Participant':participants, 'Miss Rate':missRates, 'Phase':phase, 'Age Group':ageGroup})
-missStats.to_csv(saveLoc+'/missStatsData.csv', index=False)
+## From General, only take each participant's trial 1, 30 and 31 data
+### from: https://pandas.pydata.org/docs/dev/getting_started/intro_tutorials/03_subset_data.html
+specificStats = generalStats[generalStats['Trial #'].isin([1,30,31])]
+specificStats.to_csv(saveLoc + '/specificStatsData.csv', index=False)
+
+## Learning rate
+lrStats = pd.DataFrame({'Participant ID':parIDsLR, 'Learning Rate':lr, 'Age':ageLR, 'Gender':genderLR, 'Awareness':awareLR, 'Phase':phaseLR})
+lrStats.to_csv(saveLoc + '/lrStatsData.csv', index=False)
