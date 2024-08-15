@@ -79,6 +79,8 @@ pattUnOA = pd.DataFrame(index=trials) # rts of participants who responded unawar
 rushProbOA = pd.DataFrame(index=trials) # probability of rushed response (rt < 500 ms) per trial
 rewardRateOA = pd.DataFrame(index=trials) # probability of reward (ding) per trial
 punishRateOA = pd.DataFrame(index=trials) # probability punished per trial
+trainSlopesNanOA = [] # learning rate omitting incorrect/miss responses (all awareness groups)
+testSlopesNanOA = [] # learning rate omitting incorrect/miss responses (all awareness groups)
 ## YA Data
 yaRTs = pd.DataFrame(index=trials) # for response times (same figure with oaRTs)
 corrRateYA = pd.DataFrame(index=trials) # average success rates per trial
@@ -89,6 +91,8 @@ pattUnYA = pd.DataFrame(index=trials) # aggregated rts of participants who respo
 rushProbYA = pd.DataFrame(index=trials) # probability of rushed response (rt < 500 ms) per trial
 rewardRateYA = pd.DataFrame(index=trials) # probability of reward (ding) per trial
 punishRateYA = pd.DataFrame(index=trials) # probability punished per trial
+trainSlopesNanYA = [] # learning rate omitting incorrect/miss responses (all awareness groups)
+testSlopesNanYA = [] # learning rate omitting incorrect/miss responses (all awareness groups)
 
 # Set empty arrays/dataframes for additional patternAware data analyses
 ## OA
@@ -98,6 +102,7 @@ trainSlopesOA = [] # learning rate (average difference of slopes of T1-5)
 testSlopesOA = [] # learning rate (average difference of slopes of T31-35)
 stabilizeOA = pd.DataFrame(index=np.arange(1,35)) # when learning stabilizes (i.e. when there is little to no difference in improvement in terms of correct rate); index=each transition
 variabilityOA = pd.DataFrame(index=trials) # change in RT variability within each trial
+rtAllOA = [] # rt count (histogram)
 ## YA
 improveYA = [] # improvement rates (average of T1-3 - average of T28-30)
 regressYA = [] # regression (difference of T31-T30/difference of T1-T30)
@@ -105,6 +110,7 @@ trainSlopesYA = [] # learning rate (average difference of slopes of T1-5)
 testSlopesYA = [] # learning rate (average difference of slopes of T31-35)
 stabilizeYA = pd.DataFrame(index=np.arange(1,35)) # when learning stabilizes (i.e. when there is little to no difference in improvement in terms of correct rate); index=each transition
 variabilityYA = pd.DataFrame(index=trials) # change in RT variability within each trial
+rtAllYA = [] # rt count (histogram)
 
 # Set empty arrays for stats test dataframes
 ## General stats test
@@ -129,6 +135,15 @@ ageLR = [] # age
 genderLR = [] # gender
 awareLR = [] # sequence awareness
 phaseLR = [] # phase (either initial or test)
+
+# Correct rates separating aware and unaware and by age group
+corrAwOA = pd.DataFrame(index=trials)
+corrUnOA = pd.DataFrame(index=trials)
+corrAwYA = pd.DataFrame(index=trials)
+corrUnYA = pd.DataFrame(index=trials)
+# Correct rates separating awareness (but not age groups)
+corrAware = pd.DataFrame(index=trials)
+corrUnaware = pd.DataFrame(index=trials)
 
 #############
 
@@ -275,6 +290,18 @@ for file in dirList:
         corrRateYA[fileName] = corrRatePerTrial
         incRateYA[fileName] = incRatePerTrial
         missRateYA[fileName] = missRatePerTrial
+    if surveyData['survey_awareness'] == 'awarenessYes':
+        corrAware[fileName] = corrRatePerTrial
+        if surveyData['age_dropdown'] >= 65:
+            corrAwOA[fileName] = corrRatePerTrial
+        else:
+            corrAwYA[fileName] = corrRatePerTrial
+    else:
+        corrUnaware[fileName] = corrRatePerTrial
+        if surveyData['age_dropdown'] >= 65:
+            corrUnOA[fileName] = corrRatePerTrial
+        else:
+            corrUnYA[fileName] = corrRatePerTrial
     
     # Probabilities of rushed response per trial
     rushPerTrial = [] # Array where counts of rushed responses per trial will go
@@ -367,6 +394,21 @@ for file in dirList:
         else:
             variabilityYA[fileName] = sdPerTrial
             
+        # RT Count histograms
+        plt.figure() # reset
+        plt.hist(rt)
+        plt.xlabel('RT')
+        plt.ylabel('Count')
+        plt.title(f'Frequency of response times of each key press for {fileName}')
+        figHist = plt.gcf()
+        plt.close()
+        figHist.savefig(saveDir + f'/rtCount {fileName}.png', bbox_inches='tight')
+        # Store array to appropriate age group array
+        if surveyData['age_dropdown'] >= 65:
+            rtAllOA = rtAllOA + rt.tolist()
+        else:
+            rtAllYA = rtAllYA + rt.tolist()
+            
     ############
     # Build up stats test dataframes
     
@@ -442,6 +484,20 @@ for file in dirList:
     ## Phase - append initial and test
     phaseLR.append('initial')
     phaseLR.append('test')
+    
+    ###########
+    # Learning rate omitting incorrect and miss responses
+    if surveyData['survey_awareness'] == 'awarenessYes':
+        ## from aveRTListNan, get slopes
+        aveTrainSlopesNan = np.nanmean(np.diff(aveRTListNan[:5])) # Get average slope of first 5 training blocks
+        aveTestSlopesNan = np.nanmean(np.diff(aveRTListNan[-5:])) # Get average slope of test blocks
+        ## Store into arrays
+        if surveyData['age_dropdown'] >= 65:
+            trainSlopesNanOA.append(aveTrainSlopesNan)
+            testSlopesNanOA.append(aveTestSlopesNan)
+        else:
+            trainSlopesNanYA.append(aveTrainSlopesNan)
+            testSlopesNanYA.append(aveTestSlopesNan)
        
 #############
 # Plot data
@@ -754,6 +810,7 @@ figRegress.savefig(saveLoc + '/regressionAll.png', bbox_inches='tight')
 
 
 # Learning rates (slopes of first five train blocks vs. slopes of test blocks) (select trials, all participants, OA vs. YA boxplots)
+plt.figure() # reset
 ## Concatenate data
 oaSlopes = [trainSlopesOA, testSlopesOA]
 yaSlopes = [trainSlopesYA, testSlopesYA]
@@ -828,6 +885,116 @@ plt.show(block=False)
 plt.pause(2)
 plt.close()
 figVar.savefig(saveLoc + '/variabilityAll.png', bbox_inches='tight')
+
+
+# RT Count histograms (all trials, all participants, separate age groups)
+## OA
+plt.figure() # reset
+plt.hist(rtAllOA)
+plt.xlabel('RT')
+plt.ylabel('Count')
+plt.title('Frequency of response times of each key press in older adults')
+figHistOA = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figHistOA.savefig(saveLoc + '/rtCountOA.png', bbox_inches='tight')
+# YA
+plt.figure() # reset
+plt.hist(rtAllYA)
+plt.xlabel('RT')
+plt.ylabel('Count')
+plt.title('Frequency of response times of each key press in younger adults')
+figHistYA = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figHistYA.savefig(saveLoc + '/rtCountYA.png', bbox_inches='tight')
+
+
+# Learning rates, omitting incorrect/miss responses (select trials, all participants, OA vs. YA boxplots)
+plt.figure() # reset
+## Concatenate data
+oaSlopesNan = [np.array(trainSlopesNanOA)[np.isnan(np.array(trainSlopesNanOA))==False], np.array(testSlopesNanOA)[np.isnan(np.array(testSlopesNanOA))==False]]
+yaSlopesNan = [np.array(trainSlopesNanYA)[np.isnan(np.array(trainSlopesNanYA))==False], np.array(testSlopesNanYA)[np.isnan(np.array(testSlopesNanYA))==False]]
+## Plot data
+### from: https://www.geeksforgeeks.org/how-to-create-boxplots-by-group-in-matplotlib/
+lrNanTicks = ['initial training', 'test'] # define xticks
+### Create separate boxplots for arrays
+oaNanPlot = plt.boxplot(oaSlopesNan, positions=np.array(np.arange(len(oaSlopesNan)))*2.0-0.35, widths=0.6)
+yaNanPlot = plt.boxplot(yaSlopesNan, positions=np.array(np.arange(len(yaSlopesNan)))*2.0+0.35, widths=0.6)
+# setting colors for each groups
+define_box_properties(oaNanPlot, '#2C7BB6', 'older adults')
+define_box_properties(yaNanPlot, '#D7191C', 'younger adults')
+# set the x label values
+plt.xticks(np.arange(0, len(lrNanTicks) * 2, 2), lrNanTicks)
+# set the limit for x axis
+plt.xlim(-2, len(lrNanTicks)*2)
+# Set axes labels and title
+plt.xlabel('Phase')
+plt.ylabel('Learning rate (difference in response times)')
+plt.title('Learning rates of older and younger adults, omitting incorrect/miss responses')
+figLRNan = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figLRNan.savefig(saveLoc + '/learnRateNanAll.png', bbox_inches='tight')
+
+
+# Correct rates separating aware and unaware and by age group
+plt.figure() # reset
+## Get means and SEM
+corrAwOA['Mean'] = corrAwOA.mean(axis=1) # Create column taking the mean of each row (trial)
+corrAwOA['SEM'] = corrAwOA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+corrUnOA['Mean'] = corrUnOA.mean(axis=1) # Create column taking the mean of each row (trial)
+corrUnOA['SEM'] = corrUnOA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+corrAwYA['Mean'] = corrAwYA.mean(axis=1) # Create column taking the mean of each row (trial)
+corrAwYA['SEM'] = corrAwYA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+corrUnYA['Mean'] = corrUnYA.mean(axis=1) # Create column taking the mean of each row (trial)
+corrUnYA['SEM'] = corrUnYA.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+## Plot data
+plt.plot(trials, corrAwOA['Mean'].values, color = 'blue', label = 'older adults aware')
+plt.errorbar(trials, corrAwOA['Mean'].values, yerr = corrAwOA['SEM'].values, fmt='.b', elinewidth=0.5)
+plt.plot(trials, corrUnOA['Mean'].values, color = 'c', label='older adults unaware')
+plt.errorbar(trials, corrUnOA['Mean'].values, yerr = corrUnOA['SEM'].values, fmt='.c', elinewidth=0.5)
+plt.plot(trials, corrAwYA['Mean'].values, color = 'red', label = 'younger adults aware')
+plt.errorbar(trials, corrAwYA['Mean'].values, yerr = corrAwYA['SEM'].values, fmt='.r', elinewidth=0.5)
+plt.plot(trials, corrUnYA['Mean'].values, color = 'm', label='younger adults unaware')
+plt.errorbar(trials, corrUnYA['Mean'].values, yerr = corrUnYA['SEM'].values, fmt='.m', elinewidth=0.5)
+plt.xlabel('Trial Number')
+plt.xticks(trials)
+plt.ylabel('Average correct rate')
+plt.title('Change in correct rate per trial of older vs. younger adults, aware vs. unaware of pattern')
+plt.legend()
+figCorrAwAge = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figCorrAwAge.savefig(saveLoc + '/correctAwarenessAge.png', bbox_inches='tight')
+
+
+# Correct rates separating aware and unaware (but not age groups)
+plt.figure() # reset
+## Get means and SEM
+corrAware['Mean'] = corrAware.mean(axis=1) # Create column taking the mean of each row (trial)
+corrAware['SEM'] = corrAware.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+corrUnaware['Mean'] = corrUnaware.mean(axis=1) # Create column taking the mean of each row (trial)
+corrUnaware['SEM'] = corrUnaware.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+## Plot data
+plt.plot(trials, corrAware['Mean'].values, color = 'blue', label = 'aware')
+plt.errorbar(trials, corrAware['Mean'].values, yerr = corrAware['SEM'].values, fmt='.b', elinewidth=0.5)
+plt.plot(trials, corrUnaware['Mean'].values, color = 'red', label = 'unaware')
+plt.errorbar(trials, corrUnaware['Mean'].values, yerr = corrUnaware['SEM'].values, fmt='.r', elinewidth=0.5)
+plt.xlabel('Trial Number')
+plt.xticks(trials)
+plt.ylabel('Average correct rate')
+plt.title('Change in correct rate per trial of aware vs. unaware of pattern')
+plt.legend()
+figCorrAw = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figCorrAw.savefig(saveLoc + '/correctAwarenessAll.png', bbox_inches='tight')
 
 #############
 # Save survey data
