@@ -12,7 +12,13 @@ Consolidating all analyses into one code, including:
     - change in rushed response rate per trial
     - change in reward rate per trial
     - change in punishment rate per trial
-    - stats test (a/o 20240809, only the dataframe for stats is included)
+    - learning rate
+    - improvement rate
+    - amount of regression
+    - how/when learning stabilizes
+    - response time variability
+    - response time counts
+    - dataframes for stats test
 
 Current version of this code does not omit misses (i.e. RT > 1000ms). This 
 could easily be implemented by uncommenting line 129 (rt array)
@@ -33,15 +39,6 @@ def divide_chunks(l, n):
     # looping till length l 
     for x in range(0, len(l), n):  
         yield l[x:x + n] 
-
-## To determine accuracy of reported sequence (from ChatGPT)
-def isinSequence(response, sequence):
-    # response = reported sequence, sequence = trainSeq
-    # Iterate over sequence with a sliding window
-    for t in range(len(sequence)-len(response)+1):
-        if sequence[t:t+len(response)] == response:
-            return len(response)/len(sequence)*2
-    return False
 
 # Generating boxplot figure with two datasets
 ## from: https://www.geeksforgeeks.org/how-to-create-boxplots-by-group-in-matplotlib/
