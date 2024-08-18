@@ -689,7 +689,7 @@ plt.xlim(-2, len(missTicks)*2)
 # Set axes labels and title
 plt.xlabel('Phase')
 plt.ylabel('Probability')
-plt.title('Average RT of last 5 train blocks vs. test blocks')
+plt.title('Average miss rates of last 5 train blocks vs. test blocks')
 figMiss = plt.gcf()
 plt.show(block=False)
 plt.pause(2)
