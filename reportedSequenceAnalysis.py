@@ -22,7 +22,7 @@ reportPropYA = [] # proportion of sequence reported matching actual sequence
 reportPropOA = [] # proportion of sequence reported matching actual sequence
 
 # Define file location (where reported sequences are) and take array of responses
-filePath = '/Users/joaqu/OneDrive/Documents/Bates/Kim Lab/dataFiles/20240815 Explicit/'
+filePath = '/Users/joaqu/OneDrive/Documents/Bates/Kim Lab/dataFiles/20240816 Explicit/'
 reportsFile = pd.read_csv(filePath + 'sequenceResponses.csv')
 
 # Get ratios correct
