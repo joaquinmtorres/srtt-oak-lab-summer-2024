@@ -70,7 +70,11 @@ surveyDF = pd.DataFrame() # Set empty df for aggregated survey Data
 oaRTs = pd.DataFrame(index=trials) # for response times (same figure with yaRTs)
 corrRateOA = pd.DataFrame(index=trials) # average success rates per trial
 missRateOA = pd.DataFrame(index=trials) # average miss rates (RT >= 1000) per trial
+missRateOAAw = pd.DataFrame(index=trials) # average miss rates per trial for seqAware
+missRateOAUn = pd.DataFrame(index=trials) # average miss rates per trial for seqUnaware
 incRateOA = pd.DataFrame(index=trials) # average incorrect rates (wrong key press within time limit) per trial
+incRateOAAw = pd.DataFrame(index=trials) # average incorrect rates per trial for seqAware
+incRateOAUn = pd.DataFrame(index=trials) # average incorrect rates per trial for seqUnaware
 pattAwOA = pd.DataFrame(index=trials)  # rts of participants who responded aware of a sequence
 pattUnOA = pd.DataFrame(index=trials) # rts of participants who responded unaware or unsure of a sequence
 rushProbOA = pd.DataFrame(index=trials) # probability of rushed response (rt < 500 ms) per trial
@@ -82,7 +86,11 @@ testSlopesNanOA = [] # learning rate omitting incorrect/miss responses (all awar
 yaRTs = pd.DataFrame(index=trials) # for response times (same figure with oaRTs)
 corrRateYA = pd.DataFrame(index=trials) # average success rates per trial
 missRateYA = pd.DataFrame(index=trials) # average miss rates (RT >= 1000) per trial
+missRateYAAw = pd.DataFrame(index=trials) # average miss rates per trial for seqAware
+missRateYAUn = pd.DataFrame(index=trials) # average miss rates per trial for seqUnaware
 incRateYA = pd.DataFrame(index=trials) # average incorrect rates (wrong key press within time limit) per trial
+incRateYAAw = pd.DataFrame(index=trials) # average incorrect rates per trial for seqAware
+incRateYAUn = pd.DataFrame(index=trials) # average incorrect rates per trial for seqUnaware
 pattAwYA = pd.DataFrame(index=trials)  # rts of participants who responded aware of a sequence
 pattUnYA = pd.DataFrame(index=trials) # aggregated rts of participants who responded unaware or unsure of a sequence
 rushProbYA = pd.DataFrame(index=trials) # probability of rushed response (rt < 500 ms) per trial
@@ -152,12 +160,6 @@ for file in dirList:
     fileName = file.split('/')[-1:][0].split('\\')[1].split('.')[0]
     saveDir = os.path.join(saveLoc, fileName)
     parID.append(fileName) # save participant id 
-    
-    # Skip file if analysis data for that file already exist
-    if os.path.isdir(saveDir) == True:
-        continue
-    else:
-        os.makedirs(saveDir, exist_ok=True)
         
     # Clean up dataframe by only keeping necessary columns
     ## First: survey data
@@ -291,14 +293,22 @@ for file in dirList:
         corrAware[fileName] = corrRatePerTrial
         if surveyData['age_dropdown'] >= 65:
             corrAwOA[fileName] = corrRatePerTrial
+            missRateOAAw[fileName] = missRatePerTrial
+            incRateOAAw[fileName] = incRatePerTrial
         else:
             corrAwYA[fileName] = corrRatePerTrial
+            missRateYAAw[fileName] = missRatePerTrial
+            incRateYAAw[fileName] = incRatePerTrial
     else:
         corrUnaware[fileName] = corrRatePerTrial
         if surveyData['age_dropdown'] >= 65:
             corrUnOA[fileName] = corrRatePerTrial
+            missRateOAUn[fileName] = missRatePerTrial
+            incRateOAUn[fileName] = incRatePerTrial
         else:
             corrUnYA[fileName] = corrRatePerTrial
+            missRateYAUn[fileName] = missRatePerTrial
+            incRateYAUn[fileName] = incRatePerTrial
     
     # Probabilities of rushed response per trial
     rushPerTrial = [] # Array where counts of rushed responses per trial will go
@@ -992,6 +1002,66 @@ plt.show(block=False)
 plt.pause(2)
 plt.close()
 figCorrAw.savefig(saveLoc + '/correctAwarenessAll.png', bbox_inches='tight')
+
+
+# Miss and incorrect rates separating age groups and awareness
+plt.figure() #reset
+## Get means and SEM
+missRateOAAw['Mean'] = missRateOAAw.mean(axis=1) # Create column taking the mean of each row (trial)
+missRateOAAw['SEM'] = missRateOAAw.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+missRateYAAw['Mean'] = missRateYAAw.mean(axis=1) # Create column taking the mean of each row (trial)
+missRateYAAw['SEM'] = missRateYAAw.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+missRateOAUn['Mean'] = missRateOAUn.mean(axis=1) # Create column taking the mean of each row (trial)
+missRateOAUn['SEM'] = missRateOAUn.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+missRateYAUn['Mean'] = missRateYAUn.mean(axis=1) # Create column taking the mean of each row (trial)
+missRateYAUn['SEM'] = missRateYAUn.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+incRateOAAw['Mean'] = incRateOAAw.mean(axis=1) # Create column taking the mean of each row (trial)
+incRateOAAw['SEM'] = incRateOAAw.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+incRateYAAw['Mean'] = incRateYAAw.mean(axis=1) # Create column taking the mean of each row (trial)
+incRateYAAw['SEM'] = incRateYAAw.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+incRateOAUn['Mean'] = incRateOAUn.mean(axis=1) # Create column taking the mean of each row (trial)
+incRateOAUn['SEM'] = incRateOAUn.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+incRateYAUn['Mean'] = incRateYAUn.mean(axis=1) # Create column taking the mean of each row (trial)
+incRateYAUn['SEM'] = incRateYAUn.iloc[:, :-1].sem(axis=1) # Create a column calculating the SEM of each row, not including the Means column
+## Plot data
+### Miss rates
+plt.plot(trials, missRateOAAw['Mean'].values, color = 'blue', label = 'older adults aware')
+plt.errorbar(trials, missRateOAAw['Mean'].values, yerr = missRateOAAw['SEM'].values, fmt='.b', elinewidth=0.5)
+plt.plot(trials, missRateOAUn['Mean'].values, color = 'c', label='older adults unaware')
+plt.errorbar(trials, missRateOAUn['Mean'].values, yerr = missRateOAUn['SEM'].values, fmt='.c', elinewidth=0.5)
+plt.plot(trials, missRateYAAw['Mean'].values, color = 'red', label = 'younger adults aware')
+plt.errorbar(trials, missRateYAAw['Mean'].values, yerr = missRateYAAw['SEM'].values, fmt='.r', elinewidth=0.5)
+plt.plot(trials, missRateYAUn['Mean'].values, color = 'm', label='younger adults unaware')
+plt.errorbar(trials, missRateYAUn['Mean'].values, yerr = missRateYAUn['SEM'].values, fmt='.m', elinewidth=0.5)
+plt.xlabel('Trial Number')
+plt.xticks(trials)
+plt.ylabel('Average miss rate')
+plt.title('Change in miss rate per trial of older vs. younger adults, aware vs. unaware of pattern')
+plt.legend()
+figMissAwAge = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figMissAwAge.savefig(saveLoc + '/missAwarenessAge.png', bbox_inches='tight')
+### Incorrect rates
+plt.plot(trials, incRateOAAw['Mean'].values, color = 'blue', label = 'older adults aware')
+plt.errorbar(trials, incRateOAAw['Mean'].values, yerr = incRateOAAw['SEM'].values, fmt='.b', elinewidth=0.5)
+plt.plot(trials, incRateOAUn['Mean'].values, color = 'c', label='older adults unaware')
+plt.errorbar(trials, incRateOAUn['Mean'].values, yerr = incRateOAUn['SEM'].values, fmt='.c', elinewidth=0.5)
+plt.plot(trials, incRateYAAw['Mean'].values, color = 'red', label = 'younger adults aware')
+plt.errorbar(trials, incRateYAAw['Mean'].values, yerr = incRateYAAw['SEM'].values, fmt='.r', elinewidth=0.5)
+plt.plot(trials, incRateYAUn['Mean'].values, color = 'm', label='younger adults unaware')
+plt.errorbar(trials, incRateYAUn['Mean'].values, yerr = incRateYAUn['SEM'].values, fmt='.m', elinewidth=0.5)
+plt.xlabel('Trial Number')
+plt.xticks(trials)
+plt.ylabel('Average incorrect rate')
+plt.title('Change in incorrect rate per trial of older vs. younger adults, aware vs. unaware of pattern')
+plt.legend()
+figIncAwAge = plt.gcf()
+plt.show(block=False)
+plt.pause(2)
+plt.close()
+figIncAwAge.savefig(saveLoc + '/incAwarenessAge.png', bbox_inches='tight')
 
 #############
 # Save survey data
